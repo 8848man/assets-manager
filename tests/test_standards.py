@@ -95,7 +95,7 @@ class StandardsTests(unittest.TestCase):
         self.assertFalse(os.path.exists(src))
         self.assertTrue(os.path.exists(os.path.join(os.path.dirname(src), skills.DISABLED)))
         L = Library(self.d)
-        self.assertEqual(L.nodes["tone-guide"]["origin"]["origin"], os.path.dirname(src))
+        self.assertEqual(os.path.normpath(L.nodes["tone-guide"]["origin"]["origin"]), os.path.normpath(os.path.dirname(src)))
         self.assertIn("examples.md", L.nodes["tone-guide"]["files"])
         self.assertIn("tone-guide", L.nodes["blog"]["uses"])
         self.assertNotIn("tone-guide", {s["name"] for s in skills.scan(L)})  # 원래 것은 꺼져서 두 번 안 보임

@@ -100,10 +100,30 @@ def _cmd(path: str, args: list[str]) -> list[str]:
     return [path] + args
 
 
+def _env() -> dict:
+    """자식 프로세스 출력은 UTF-8로 (파이썬 도구는 Windows에서 기본이 cp949라 로그가 깨진다)."""
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    return env
+
+
+def _decode(data: bytes) -> str:
+    """UTF-8로 읽고, 아니면 이 PC의 기본 인코딩(Windows 한국어 = cp949)으로. 잘린 앞머리 바이트는 버린다."""
+    for cut in range(4):
+        try:
+            return data[cut:].decode("utf-8")
+        except UnicodeDecodeError as e:
+            if e.start > cut:  # 앞머리가 아니라 중간에서 깨짐 → UTF-8이 아님
+                break
+    import locale
+    return data.decode(locale.getpreferredencoding(False) or "utf-8", "replace")
+
+
 def _run(cmd: list[str], cwd: str, timeout: int) -> tuple[int, str]:
     kw = {"creationflags": 0x08000000} if WIN else {}  # CREATE_NO_WINDOW
-    p = subprocess.run(cmd, cwd=cwd, capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL, **kw)
-    out = (p.stdout or b"").decode("utf-8", "replace") + (p.stderr or b"").decode("utf-8", "replace")
+    p = subprocess.run(cmd, cwd=cwd, capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL, env=_env(), **kw)
+    out = _decode(p.stdout or b"") + _decode(p.stderr or b"")
     return p.returncode, out.strip()
 
 
@@ -244,7 +264,7 @@ def start(root: str, kind: str, prompt_path: str, ref: dict, tool: str | None = 
         try:
             with open(log_path, "wb") as log:
                 p = subprocess.Popen(_cmd(t["path"], args), cwd=root, stdout=log, stderr=subprocess.STDOUT,
-                                     stdin=subprocess.DEVNULL, **kw)
+                                     stdin=subprocess.DEVNULL, env=_env(), **kw)
                 with _lock:
                     _procs[jid] = p
                 try:
@@ -309,7 +329,7 @@ def get_job(root: str, jid: str, tail: int = 4000) -> dict:
     try:
         with open(os.path.join(_jobs_dir(root), jid + ".log"), "rb") as f:
             data = f.read()
-        job["log"] = data[-tail:].decode("utf-8", "replace")
+        job["log"] = _decode(data[-tail:])
     except OSError:
         job["log"] = ""
     if job.get("state") == "running":

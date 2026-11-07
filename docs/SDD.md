@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.12.1 · 기획서 v3.3(+14A~14G) 기준 · 2026-11-07
+앱 버전 0.12.2 · 기획서 v3.3(+14A~14G) 기준 · 2026-11-07
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -227,7 +227,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 - 도구 정의 `TOOLS`: `claude`(Claude Code: `-p {instruction} --permission-mode acceptEdits --allowedTools Read,Write,Edit,Glob,Grep,Bash(python:*)… --max-turns 60`), `codex`(Codex CLI: `exec --full-auto --skip-git-repo-check {instruction}`). 인자는 설정에서 바꿀 수 있다. Windows의 `.cmd`는 `cmd /c`로 감싼다.
 - 지시(`instruction_for`)는 한 줄: "파일 `<prompt 상대 경로>` 를 읽고 그대로 수행, 지시된 위치에만 쓰기, 질문하지 말고 끝까지". 따옴표·`&|<>%^` 없음(cmd 안전). 작업 폴더는 라이브러리 루트(루트 AGENTS.md·CLAUDE.md의 쓰기 규칙이 함께 읽힘).
 - `run_for`: tidy → 에이전트용 `tidy.render`를 `inbox/<rid>/prompt-local.md`에, 기대 결과 `inbox/<rid>/out/plan.yaml` / request → `folder_requests.package(에이전트 대상)`의 `package/prompt.md`, 기대 결과 같은 plan / authoring → `authoring.build(에이전트 대상)`, 메타는 원본 옆.
-- `start`: 스레드에서 `Popen`, 출력은 `.assets/local-ai/jobs/<job>.log`, 상태는 `<job>.json`(running → done | failed | cancelled). 20분 제한. 종료 코드 0이어도 기대 결과 파일이 없으면 failed. 취소는 Windows `taskkill /T /F`.
+- `start`: 스레드에서 `Popen`, 출력은 `.assets/local-ai/jobs/<job>.log`, 상태는 `<job>.json`(running → done | failed | cancelled). 자식 프로세스에는 `PYTHONIOENCODING=utf-8`·`PYTHONUTF8=1`을 주고, 출력은 UTF-8로 읽되 아니면 이 PC 기본 인코딩(Windows 한국어 cp949)으로 읽는다(`_decode`). 20분 제한. 종료 코드 0이어도 기대 결과 파일이 없으면 failed. 취소는 Windows `taskkill /T /F`.
 - 흐름: 기능 버튼 → `ensureLocalAI`(준비 안 됐으면 설정 창을 안내 모드로) → `runLocal` → 오른쪽 아래 진행 표시 → 끝나면 기존 미리보기(정리 창·결과 창)를 연다. 반영은 언제나 사용자가 한다.
 
 ### 6.9 스킬 연동 (`skills`, Q77-A)
