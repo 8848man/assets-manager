@@ -34,6 +34,20 @@ FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.S)
 
 
 GENERATED = {"index.md", "graph.json", "layout.json"}  # 앱이 쓰는 파일 (변경 감지에서 뺀다)
+# v3.9 구성 요소 분리 (Q81-A): 레퍼런스 이미지의 캐릭터·도형·구도. keys.yaml의 parts:가 있으면 그쪽이 우선
+PART_DEFAULTS = {
+    "character": {"label": "캐릭터", "key": "character_style",
+                  "ref_instruction": "캐릭터는 첨부 [{n}] {file}(원본에서 잘라 낸 캐릭터)을 보고 얼굴 표현, 머리와 몸의 비례, "
+                                     "팔다리 모양, 외곽선 굵기를 그대로 따르세요. 자세와 소품은 장면에 맞게 바꿔도 됩니다.",
+                  "check": "캐릭터의 얼굴 표현·비례·외곽선이 첨부 [{n}]의 캐릭터와 같은가"},
+    "shape": {"label": "도형", "key": "shape_style",
+              "ref_instruction": "도형(블록, 상자, 아이콘 등)은 첨부 [{n}] {file}의 모양, 모서리 둥글기, 외곽선, 면 채색, "
+                                 "라벨을 넣는 위치를 따르세요.",
+              "check": "도형의 모양·모서리·외곽선이 첨부 [{n}]의 도형과 같은가"},
+    "composition": {"label": "구도", "key": "composition",
+                    "ref_instruction": "배치와 구도는 첨부 [{n}] {file}(원본 위에 덩어리 위치와 흐름 방향을 그린 도식)을 따르세요.",
+                    "check": "덩어리 배치와 흐름 방향이 첨부 [{n}]의 구도 도식과 같은가"},
+}
 
 
 def library_signature(root: str) -> str:
@@ -74,6 +88,9 @@ class Library:
         self.nodes: dict[str, dict] = {}
         self.issues: list[dict] = []  # {level: error|warning, node, message}
         self.keys = self._read_yaml("_defaults/keys.yaml").get("keys", {}) or {}
+        user_parts = self._read_yaml("_defaults/keys.yaml").get("parts") or {}
+        self.parts = {k: dict(v, **(user_parts.get(k) or {})) for k, v in PART_DEFAULTS.items()}
+        self.parts.update({k: dict(v) for k, v in user_parts.items() if k not in self.parts and isinstance(v, dict)})
         self.targets = self._read_yaml("_defaults/targets.yaml").get("targets", {}) or {}
         self.defaults_version = {
             "keys": self._read_yaml("_defaults/keys.yaml").get("version"),
@@ -204,6 +221,14 @@ class Library:
             "authored_by": meta.get("authored_by"),
             "extracted": meta.get("extracted") or {},
         }
+        import components as comps_mod  # v3.9 구성 요소 (Q81-A)
+        ex = node["extracted"]
+        size = (int(ex["width"]), int(ex["height"])) if ex.get("width") and ex.get("height") else None
+        node["components"], problems = comps_mod.normalize(meta.get("components"), self.parts, size)
+        for c in node["components"]:
+            c["file"] = comps_mod.part_rel(node["id"], c["name"])
+        for p in problems:
+            self.issues.append({"level": "warning", "node": node["id"], "message": f"구성 요소: {p}"})
         abs_file = os.path.join(self.root, file_rel)
         node["exists"] = os.path.isfile(abs_file)
         node["size"] = os.path.getsize(abs_file) if node["exists"] else 0
@@ -287,6 +312,10 @@ class Library:
                 ref = self._ref_id(r["value"])
                 if ref and ref not in self.nodes:
                     self.issues.append({"level": "error", "node": n["id"], "message": f"{key}: 레퍼런스 없음 ref:{ref}"})
+                part = self._ref_part(r["value"])
+                if ref in self.nodes and part and part not in {c["name"] for c in self.nodes[ref].get("components") or []}:
+                    self.issues.append({"level": "error", "node": n["id"],
+                                        "message": f"{key}: 구성 요소 없음 ref:{ref}#{part}"})
         for n in self.nodes.values():
             for rel in n.get("relations") or []:
                 if rel.get("target") not in self.nodes:
@@ -307,9 +336,24 @@ class Library:
 
     @staticmethod
     def _ref_id(value: Any) -> str | None:
+        """`ref:<id>` 또는 `ref:<id>#<요소>`(v3.9)의 노드 id."""
         if isinstance(value, str) and value.startswith("ref:"):
-            return value[4:].strip()
+            return value[4:].split("#", 1)[0].strip()
         return None
+
+    @staticmethod
+    def _ref_part(value: Any) -> str | None:
+        """`ref:<id>#<요소>`의 요소 이름 (없으면 None)."""
+        if isinstance(value, str) and value.startswith("ref:") and "#" in value:
+            return value.split("#", 1)[1].strip() or None
+        return None
+
+    def _ensure_components(self, rn: dict) -> bool:
+        try:
+            import components as comps_mod
+            return comps_mod.ensure(self, rn)
+        except Exception:
+            return False
 
     def abspath(self, rel: str) -> str:
         return os.path.normpath(os.path.join(self.root, rel))
@@ -430,8 +474,10 @@ class Library:
                         e["status"] = "text_only" if rn["spec"] else "missing"
                     elif rn["size"] == 0:
                         e["status"] = "empty" if not rn["spec"] else "text_only"
+                    self._attach_components(e, rn, self._ref_part(f["value"]))
+            own = e.pop("_own_check", None)
             e["check"] = ([spec["check"]] if spec.get("check") else []) + (
-                list(self.nodes[ref]["check"]) if ref and ref in self.nodes else [])
+                own if own is not None else (list(self.nodes[ref]["check"]) if ref and ref in self.nodes else []))
             entries.append(e)
 
         # 우선순위 (Q46~Q47): 키 어휘 기본값 → 상속 순서대로 세트가 덮어씀
@@ -466,6 +512,34 @@ class Library:
                             "dir_abs": self.abspath(self.nodes[k]["dir"]), "files": self.nodes[k]["files"],
                             "sensitivity": self.nodes[k]["sensitivity"]} for k in self.skills_of(nid)]}
 
+    def _attach_components(self, e: dict, rn: dict, part: str | None) -> None:
+        """v3.9 (Q81-A): `ref:<id>#<요소>`면 항목 자체를 그 요소로, `ref:<id>`이고 요소가 있으면 e["components"]."""
+        comps = rn.get("components") or []
+        if not comps and not part:
+            return
+        import components as comps_mod
+        drawn = rn["exists"] and rn["size"] > 0 and self._ensure_components(rn)
+
+        def status(c):
+            return "ok" if drawn else ("text_only" if c["spec"] else "missing")
+
+        if part:
+            c = next((c for c in comps if c["name"] == part), None)
+            if not c:
+                e["status"] = "missing"
+                return
+            e.update(part=part, part_kind=c["part"], ref_title=f"{rn['title']} · {c['title']}", ref_file=c["file"],
+                     ref_abs=self.abspath(c["file"]), spec=c["spec"] or rn["spec"], status=status(c),
+                     legend=comps_mod.legend(c, comps) if c["part"] == "composition" else "",
+                     ref_size=os.path.getsize(self.abspath(c["file"])) if drawn else 0, _own_check=list(c.get("check") or []))
+            return
+        e["components"] = [{
+            "name": c["name"], "part": c["part"], "label": self.parts.get(c["part"], {}).get("label", c["part"]),
+            "title": c["title"], "file": c["file"], "abs": self.abspath(c["file"]), "spec": c["spec"],
+            "check": list(c.get("check") or []), "status": status(c), "pkey": self.parts.get(c["part"], {}).get("key"),
+            "legend": comps_mod.legend(c, comps) if c["part"] == "composition" else "",
+        } for c in comps]
+
     # ------------------------------------------------------------------ 렌더
     def render(self, asm: dict, mode: dict | None = None, paths: bool = False,
                closing: bool = True) -> tuple[str, list[dict]]:
@@ -487,7 +561,50 @@ class Library:
         sheet_slots: list[dict] = []
         where: dict[str, str] = {}   # 키 → "첨부 [n]" 등 (우선순위 문장용)
         included: list[dict] = []
+        comp_checks: list[str] = []
+        comp_prec: list[tuple[str, str, str]] = []  # (규칙 키, 요소 라벨, 요소 위치)
         n = 1  # 첨부 레퍼런스 번호 (prompt.md 자신은 세지 않음)
+
+        def emit_components(e: dict, pnum, force_text: bool) -> None:
+            """v3.9 (Q81-A): 레퍼런스에서 분리한 요소를 그 항목 바로 아래에. 원본이 첨부면 [2-a], 아니면 새 번호."""
+            nonlocal n
+            letter = 0
+            for c in e.get("components") or []:
+                ck = f"{e['key']}#{c['name']}"
+                cm = mode.get(ck, "attach")
+                if cm == "drop":
+                    continue
+                if force_text or c["status"] != "ok":
+                    cm = "text"
+                if cm == "text" and not c["spec"]:
+                    continue
+                pt = self.parts.get(c["part"], {})
+                leg = f" (도식 번호: {c['legend']})" if c.get("legend") and cm == "attach" else (
+                    f" 덩어리: {c['legend']}." if c.get("legend") else "")
+                if cm == "text":
+                    lines.append(f"  - **{c['label']}** (분리한 요소 '{c['title']}'를 글로 옮긴 것): {c['spec']}{leg}")
+                    cwhere = "(글로 옮긴 요소)"
+                    comp_checks.extend(c["check"])
+                else:
+                    if isinstance(pnum, int):
+                        cnum = f"{pnum}-{'abcdefghijklmnopqrstuvwxyz'[letter % 26]}"
+                        letter += 1
+                    else:
+                        cnum = n
+                        n += 1
+                    fname = os.path.basename(c["file"])
+                    attachments.append({"n": cnum, "key": ck, "abs": c["abs"], "file": fname,
+                                        "title": f"{e['ref_title']} · {c['title']}", "component": True})
+                    tmpl = pt.get("ref_instruction") or "{title}은 첨부 [{n}] {file}을 따르세요."
+                    lines.append(f"  - **{c['label']}**: " + tmpl.format(n=cnum, file=fname, title=c["title"]) + leg
+                                 + (f" 설명: {c['spec']}" if c["spec"] else ""))
+                    cwhere = f"(첨부 [{cnum}])"
+                    if pt.get("check"):
+                        comp_checks.append(pt["check"].format(n=cnum))
+                    comp_checks.extend(c["check"])
+                if c.get("pkey") and c["pkey"] != e["key"]:
+                    comp_prec.append((c["pkey"], c["label"], cwhere))
+
         for e in asm["entries"]:
             m = mode.get(e["key"], "attach")
             if m == "drop":
@@ -503,8 +620,9 @@ class Library:
             included.append(e)
             if m == "text" or e["status"] == "text_only":
                 lines.append(f"- **{e['label']}** (레퍼런스 '{e['ref_title']}'를 글로 옮긴 것): "
-                             + " ".join(e["spec"].split()))
+                             + " ".join(e["spec"].split()) + (f" 덩어리: {e['legend']}." if e.get("legend") else ""))
                 where[e["key"]] = "(글로 옮긴 레퍼런스)"
+                emit_components(e, None, True)
                 continue
             if m == "sheet":
                 slot = len(sheet_slots) + 1
@@ -520,12 +638,18 @@ class Library:
                 file_label = os.path.basename(e["ref_file"])
                 where[e["key"]] = f"(첨부 [{num}])"
             tmpl = e["note"] or spec.get("ref_instruction") or "첨부 [{n}] {file}를 참고하세요."
-            lines.append(f"- **{e['label']}**: " + tmpl.format(n=num, file=file_label, title=e["ref_title"]))
+            lines.append(f"- **{e['label']}**: " + tmpl.format(n=num, file=file_label, title=e["ref_title"])
+                         + (f" (도식 번호: {e['legend']})" if e.get("legend") else ""))
+            emit_components(e, num, False)
 
         keys_in = {e["key"] for e in included}
         prec = [p for p in asm.get("precedence", []) if p["first"] in keys_in and p["over"] in keys_in]
         has_examples = any(k.startswith("_example_") for k in keys_in)
-        if prec or has_examples:
+        cprec = []
+        for pk, label, cw in comp_prec:  # v3.9: 같은 측면의 규칙이 있으면 규칙이 분리한 요소보다 우선
+            if pk in keys_in and (pk, label, cw) not in cprec:
+                cprec.append((pk, label, cw))
+        if prec or has_examples or cprec:
             lines += ["", "## 우선순위 (규칙끼리 겹칠 때)"]
         if has_examples:
             lines.append("- 참고 예시는 참고용입니다. 골든 샘플이나 위 규칙과 다르면 **기준(골든 샘플과 규칙)을 따르세요.**")
@@ -535,6 +659,9 @@ class Library:
                 lines.append(f"- {p['scope'] or '겹치는 부분'}에 관해서는 **{a.get('label', p['first'])}**"
                              f"{where.get(p['first'], '')}을(를) **{b.get('label', p['over'])}**"
                              f"{where.get(p['over'], '')}보다 우선합니다.")
+        for pk, label, cw in cprec:
+            lines.append(f"- {label}에 관해서는 **{self.key_spec(pk).get('label', pk)}** 규칙{where.get(pk, '')}을 "
+                         f"분리한 요소{cw}보다 우선합니다. 규칙에 없는 부분은 요소를 따르세요.")
         if sheet_slots:
             attachments.append({"n": "S", "key": "_sheet", "abs": None, "file": "contact-sheet.png",
                                 "title": "레퍼런스 이미지 모음", "slots": sheet_slots})
@@ -547,6 +674,9 @@ class Library:
             for c in e.get("check") or []:
                 if c not in checks:
                     checks.append(c)
+        for c in comp_checks:
+            if c not in checks:
+                checks.append(c)
         skills = [k for k in asm.get("skills") or [] if (mode or {}).get("_skill_" + k["id"]) != "drop"]
         if skills:  # v3.7 붙은 스킬: 이름·설명만, 본문은 필요할 때 읽게 (스킬처럼)
             lines += ["", "## 함께 쓰는 스킬",
@@ -672,12 +802,27 @@ class Library:
             by_prio = lambda es: sorted(es, key=lambda e: (PRIORITY_ORDER.get(e["priority"], 0), e["key"]))
             # 0) 크기 초과 파일은 먼저 텍스트로
             for vv in [v for v in violations if v["kind"] == "size"]:
+                if "#" in vv["key"]:  # v3.9 분리한 요소
+                    pk, cn = vv["key"].split("#", 1)
+                    c = next(c for x in refs if x["key"] == pk for c in x.get("components") or [] if c["name"] == cn)
+                    mode[vv["key"]] = "text" if c["spec"] else "drop"
+                    log.append(f"{c['label']} 요소: 크기 초과 첨부를 {'텍스트로 대체' if c['spec'] else '제외'}")
+                    continue
                 e = next(x for x in refs if x["key"] == vv["key"])
                 if e.get("spec"):
                     mode[e["key"]] = "text"; log.append(f"{e['label']}: 크기 초과 첨부를 텍스트로 대체")
                 else:
                     mode[e["key"]] = "drop"; log.append(f"{e['label']}: 크기 초과, spec이 없어 제외")
             prompt, att, violations = evaluate()
+            # 0-1) v3.9: 분리한 요소 첨부 → 글 (원본보다 먼저)
+            for e in by_prio(attached()):
+                for c in e.get("components") or []:
+                    ck = f"{e['key']}#{c['name']}"
+                    if not any(v["kind"] == "files" for v in violations) or mode.get(ck, "attach") != "attach":
+                        continue
+                    mode[ck] = "text" if c["spec"] else "drop"
+                    log.append(f"요소: {e['label']}의 {c['label']} 첨부 → {'텍스트(spec)로 대체' if c['spec'] else '제외'}")
+                    prompt, att, violations = evaluate()
             # 1) spec 텍스트 대체 (선택 → 권장 → 필수)
             for e in by_prio(attached()):
                 if not any(v["kind"] == "files" for v in violations):
@@ -743,7 +888,10 @@ class Library:
             "id": nid, "target": target, "target_label": tgt.get("label", target), "limits": tgt,
             "prompt": prompt, "clipboard": clip_prompt, "files": files, "chain": asm["chain"], "task": asm.get("task", ""),
             "gate": asm.get("gate", True), "set_gate": set_gate,
-            "entries": [dict(e, mode=mode.get(e["key"], "attach")) for e in asm["entries"]],
+            "entries": [dict(e, mode=mode.get(e["key"], "attach"),
+                             **({"components": [dict(c, mode=mode.get(f"{e['key']}#{c['name']}", "attach"))
+                                                for c in e["components"]]} if e.get("components") else {}))
+                        for e in asm["entries"]],
             "violations": violations, "warnings": warnings, "log": log,
             "sensitive": sensitive_nodes, "can_trim": bool(violations) and not trim,
             "needs_strip": bool(internal) and not tgt.get("allow_internal", True) and not strip_sensitive,

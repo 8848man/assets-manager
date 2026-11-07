@@ -29,13 +29,14 @@ import export_cmd  # noqa: E402
 import rag  # noqa: E402
 import store  # noqa: E402
 import tidy  # noqa: E402
+import components  # noqa: E402
 import local_ai  # noqa: E402
 import skills  # noqa: E402
 import console  # noqa: E402
 import terminal  # noqa: E402
 from engine import library_signature  # noqa: E402
 
-APP_VERSION = "0.12.2"  # UI(app.js)의 APP_VERSION과 같아야 함
+APP_VERSION = "0.13.0"  # UI(app.js)의 APP_VERSION과 같아야 함
 UI_DIR = os.path.join(APP_DIR, "ui")
 LOCK = threading.Lock()
 STATE: dict = {}
@@ -194,6 +195,10 @@ class Handler(BaseHTTPRequestHandler):
                         return self._json({"request": r["id"], "status": r["status"],
                                            "preview": tidy.preview(lib, r["id"]) if r["status"] == "received" else None})
                 return self._json({"request": None})
+            if p == "/api/components/request":  # v3.9 구성 요소 분리 요청 (Q81-A)
+                return self._json(components.build(library(), q["node"], q.get("target") or None))
+            if p == "/api/components/open":  # 이 노드의 열린 분리 요청 (에이전트가 out/plan.yaml에 썼을 수도)
+                return self._json(components.open_request(library(), q.get("node", "")))
             if p == "/api/requests":
                 return self._json(freq.list_requests(STATE["root"]))
             m = re.fullmatch(r"/api/request/([A-Za-z0-9_-]+)/(package|preview)", p)
@@ -346,6 +351,22 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/api/local-ai/job/([A-Za-z0-9_-]+)/cancel", u.path)
             if m:
                 return self._json(local_ai.cancel(library().root, m.group(1)))
+            m = re.fullmatch(r"/api/components/([A-Za-z0-9_-]+)/(receive|preview|apply)", u.path)
+            if m:  # v3.9 구성 요소: AI 답 붙여넣기 → 미리보기(상자 조정) → 반영
+                lib = library()
+                rid, act = m.group(1), m.group(2)
+                if act == "receive":
+                    return self._json(components.receive(lib, rid, body.get("text") or ""))
+                if act == "preview":
+                    return self._json(components.preview(lib, rid, body.get("edits")))
+                res = components.apply(lib, rid, body.get("selected") or [], body.get("edits"))
+                library(sync=True, message=f"구성 요소 반영 ({res['node']}): {', '.join(res['applied'])}")
+                return self._json(res)
+            m = re.fullmatch(r"/api/components/node/([^/]+)", u.path)
+            if m:  # v3.9 상세 화면에서 사람이 고친 요소 목록 저장
+                res = components.save(library(), unquote(m.group(1)), body.get("components") or [])
+                library(sync=True, message=f"구성 요소 수정 ({res['node']})")
+                return self._json(res)
             m = re.fullmatch(r"/api/tidy/([A-Za-z0-9_-]+)/(receive|preview|apply)", u.path)
             if m:
                 lib = library()
@@ -440,6 +461,10 @@ def node_detail(lib: Library, nid: str) -> dict:
             out["text"] = f.read(4000)
     if n["kind"] == "unregistered":
         out["extracted"] = extractor.extract(lib.abspath(n["file"]))
+    if n.get("components"):  # v3.9 잘라 낸 그림·구도 도식 캐시를 맞춘다
+        out["components_drawn"] = components.ensure(lib, n)
+        out["components"] = [dict(c, legend=components.legend(c, n["components"]) if c["part"] == "composition" else "")
+                             for c in n["components"]]
     out["used_by"] = [r["id"] for r in lib.rule_nodes()
                       if any(lib._ref_id(x["value"]) == nid for x in r["rules"].values())]
     if n["type"] == "rule":

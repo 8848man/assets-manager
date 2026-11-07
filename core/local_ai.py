@@ -360,7 +360,7 @@ def agent_target(lib) -> str:
 
 
 def run_for(lib, body: dict) -> dict:
-    """body: {kind: tidy|request|authoring, request?, files?, note?, tool?} → 작업 시작."""
+    """body: {kind: tidy|components|request|authoring, request?, files?, note?, tool?} → 작업 시작."""
     import folder_requests as freq
     kind = body.get("kind")
     tgt = agent_target(lib)
@@ -371,6 +371,16 @@ def run_for(lib, body: dict) -> dict:
         req = freq._load(lib.root, rid)
         ids = [i for i in (req.get("scope") or tidy.scope(lib, req["node"])) if i in lib.nodes]
         prompt = tidy.render(lib, req["node"], rid, ids, tidy.diagnose(lib, ids), tgt, req.get("goal"))
+        path = os.path.join(freq._rdir(lib.root, rid), "prompt-local.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(prompt)
+        expect = [f"{freq.INBOX}/{rid}/out/plan.yaml"]
+        ref = {"request": rid, "node": req.get("node")}
+    elif kind == "components":  # v3.9 구성 요소 분리 (Q81-A)
+        import components
+        rid = body["request"]
+        req = freq._load(lib.root, rid)
+        prompt = components.render_request(lib, req["node"], rid, tgt)
         path = os.path.join(freq._rdir(lib.root, rid), "prompt-local.md")
         with open(path, "w", encoding="utf-8") as f:
             f.write(prompt)

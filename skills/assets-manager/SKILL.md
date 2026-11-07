@@ -45,6 +45,7 @@ metadata:
 - **폴더 요청 / AI에게 맡기기** (레퍼런스 묶음을 노드로 만들기): 메타 파일 + `plan.yaml`. 형식은 [references/plan-format.md](references/plan-format.md)
 - **파일 등록** (메타 없는 파일에 `.meta.yaml` 쓰기): [references/meta-format.md](references/meta-format.md)
 - **하위 정리** (노드 아래 구조를 읽기 쉽게): `plan.yaml`의 `ops`. [references/tidy-ops.md](references/tidy-ops.md)
+- **구성 요소 나누기** (이미지 레퍼런스의 캐릭터·도형·구도 좌표와 설명): `plan.yaml`의 `components`. [references/components-format.md](references/components-format.md)
 - **작업을 내 표준대로**: 해당 세트의 최종 규칙을 따르세요. 같은 이름의 세트 스킬이 설치돼 있으면 그 스킬이 이미 조립된 규칙입니다.
 
 ### 끝낼 때

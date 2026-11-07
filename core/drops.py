@@ -71,6 +71,13 @@ def stage(lib: Library, node_id: str | None, paths: list[str] | None = None, upl
         name, data = zips[0]
         if freq.zip_has_plan(data):
             rid = freq.receive_zip(lib, data, node_id)
+            if freq._load(lib.root, rid).get("kind") == "components":  # v3.9 구성 요소 분리 결과
+                import components
+                creq = freq._load(lib.root, rid)
+                creq["status"] = "received"
+                freq._save(lib.root, creq)
+                return {"sid": rid, "case": "components", "what": {"zip": name}, "where": where, "options": [],
+                        "details": components.preview(lib, rid), "simple": False}
             if freq._load(lib.root, rid).get("kind") == "tidy":  # v3.4 하위 정리 결과
                 import tidy
                 tidy_req = freq._load(lib.root, rid)

@@ -1,5 +1,5 @@
 /* Assets Manager UI — 그래프, 상세 패널, 드롭 영역, AI 작성 흐름, 가져오기, 기록과 되돌리기 (기획서 v3) */
-const APP_VERSION = "0.12.2"; // server.py의 APP_VERSION과 같아야 함
+const APP_VERSION = "0.13.0"; // server.py의 APP_VERSION과 같아야 함
 const API = location.port === "8765" ? "" : "http://127.0.0.1:8765";
 const TAURI = window.__TAURI__ || null;
 const $ = (s) => document.querySelector(s);
@@ -208,7 +208,7 @@ function renderTopbar(g) {
   const rb = $("#result-btn");
   rb.hidden = !done.length;
   rb.textContent = `AI 결과 도착 ${done.length}개`;
-  rb.onclick = () => (done[0].kind === "tidy" ? openTidy(done[0].node) : openResult(done[0].id));
+  rb.onclick = () => (done[0].kind === "tidy" ? openTidy(done[0].node) : done[0].kind === "components" ? openComponents(done[0].node) : openResult(done[0].id));
   const b = g.backup || {};
   $("#backup").textContent = b.repo ? "Git 기록 중" : b.inside_other ? "버전 보관 (상위 폴더가 Git)" : b.available === false ? "버전 보관 (Git 없음)" : "버전 보관";
   $("#backup").title = b.error ? "Git 오류: " + b.error : "변경은 자동으로 기록되어 되돌릴 수 있습니다";
@@ -293,6 +293,7 @@ function renderRef(n) {
     (n.keywords?.length ? `<h3>관련어 (검색용)</h3><div>${n.keywords.map((k) => `<span class="chip">${esc(k)}</span>`).join("")}</div>` : "") +
     `<div class="row"><button class="ghost small" id="rewrite-btn">AI로 설명 ${n.spec ? "다시 " : ""}쓰기</button></div>` +
     `<h3>설명</h3><div>${esc(n.summary) || '<span class="muted">없음</span>'}</div>` +
+    (n.kind === "output" ? "" : compsHtml(n)) +
     `<h3>텍스트 요약 (spec)</h3><div class="muted" style="white-space:pre-wrap">${esc(n.spec) || "없음 — 자동 덜어내기에서 텍스트로 대체할 수 없습니다."}</div>` +
     (n.check?.length ? `<h3>자가 점검</h3><ul class="checks">${n.check.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : "") +
     `<h3>사용하는 규칙 노드</h3><div>${(n.used_by || []).map((u) => `<button class="ghost" data-go="${esc(u)}">${esc(u)}</button>`).join(" ") || '<span class="muted">없음</span>'}</div>` +
@@ -301,13 +302,15 @@ function renderRef(n) {
     (n.extracted && Object.keys(n.extracted).length ? `<h3>추출 값</h3><pre class="code">${esc(JSON.stringify(n.extracted, null, 1))}</pre>` : "") + `</div>` +
     versionsHtml(n);
   bindCommon(n);
+  bindComps(n);
 }
 
 function valueCell(e) {
   if (e.kind === "ref") {
     const img = e.ref_type === "image" && e.status === "ok" ? `<img src="${fileUrl(e.ref_file)}" alt="">` : "";
     const st = e.status === "empty" ? ' <span class="chip internal">비어 있음</span>' : e.status === "missing" ? ' <span class="chip internal">없음</span>' : "";
-    return `<span class="refchip" data-go="${esc(e.ref)}">${img}<span>${esc(e.ref_title || e.ref)}</span></span>${st}`;
+    const comps = (e.components || []).length ? ` <span class="chip" title="${esc(e.components.map((c) => c.label + ": " + c.title).join(" / "))}">+ 요소 ${e.components.length}개</span>` : "";
+    return `<span class="refchip" data-go="${esc(e.ref)}">${img}<span>${esc(e.ref_title || e.ref)}</span></span>${st}${comps}`;
   }
   return esc(e.value);
 }
@@ -600,6 +603,7 @@ async function handleDrop(body) {
   let o;
   try { o = await post("/api/stage", body); } catch (e) { return toast("놓기 실패: " + e.message); }
   if (o.case === "tidy") return showTidyPreview(o.sid, o.details);
+  if (o.case === "components") return showCompPreview(o.sid, o.details);
   if (!outcomeOn() && o.simple) {
     const opt = o.options.find((x) => x.default) || o.options[0];
     return commitOutcome(o, opt.id, {});
@@ -1792,3 +1796,222 @@ waitForServer().then(async () => {
   setTimeout(conPoll, 2000);
   if (localGet("console") === "1") conToggle(true);
 }).catch(() => {});
+
+/* ---------------------------------------------------------------- 구성 요소 분리 (v3.9, Q81-A) */
+const PART_LABEL = { character: "캐릭터", shape: "도형", composition: "구도" };
+const BOX_COLORS = ["#2e6f5e", "#cd523c", "#3a5cba", "#b07c12", "#8048a8", "#248caa"];
+
+function compsHtml(n) {
+  if (n.type !== "image" || n.kind === "unregistered") return "";
+  const cs = n.components || [];
+  const cards = cs.map((c) => `
+    <div class="comp-card">
+      ${n.components_drawn ? `<img src="${fileUrl(c.file)}?v=${encodeURIComponent((c.box || []).join("-"))}" alt="">` : `<div class="comp-noimg">그림 없음</div>`}
+      <div class="comp-text">
+        <div><span class="chip">${esc(PART_LABEL[c.part] || c.part)}</span> <b>${esc(c.title)}</b></div>
+        <div class="muted comp-spec">${esc(c.spec || "설명 없음")}</div>
+        ${c.legend ? `<div class="meta-line">번호: ${esc(c.legend)}</div>` : ""}
+        ${(c.check || []).length ? `<ul class="checks">${c.check.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+        <div class="row" style="margin:4px 0 0"><code class="refcode" title="세트 규칙에 이 값을 쓰면 이 요소만 첨부합니다">ref:${esc(n.id)}#${esc(c.name)}</code>
+          <button class="ghost small" data-copy-ref="ref:${esc(n.id)}#${esc(c.name)}">복사</button>
+          <button class="ghost small" data-comp-del="${esc(c.name)}">빼기</button></div>
+      </div>
+    </div>`).join("");
+  return `<h3>구성 요소 ${cs.length ? cs.length + "개" : ""} <span class="muted" style="font-weight:400">— 드롭할 때 원본과 함께 첨부해 캐릭터·도형·구도가 뭉개지지 않게 합니다</span></h3>
+    ${cs.length ? `<div class="comp-grid">${cards}</div>` : `<div class="muted">아직 나누지 않았습니다. AI가 캐릭터·도형·구도의 위치와 설명을 정하면, 앱이 잘라 내고 구도 도식을 그립니다.</div>`}
+    <div class="row"><button class="${cs.length ? "ghost" : "primary"} small" id="comp-split">AI로 ${cs.length ? "다시 " : ""}나누기</button>
+    ${cs.length ? `<button class="ghost small" id="comp-edit">상자 고치기</button>` : ""}</div>`;
+}
+
+function bindComps(n) {
+  $("#comp-split")?.addEventListener("click", () => openComponents(n.id));
+  $("#comp-edit")?.addEventListener("click", () => editComponents(n));
+  document.querySelectorAll("[data-copy-ref]").forEach((b) => b.addEventListener("click", () =>
+    copy(b.dataset.copyRef).then(() => toast("복사했습니다. 세트 규칙의 값으로 쓰면 이 요소만 첨부합니다"))));
+  document.querySelectorAll("[data-comp-del]").forEach((b) => b.addEventListener("click", async () => {
+    if (!confirm(`'${b.dataset.compDel}' 요소를 뺄까요? (바뀌기 전 상태는 보관되어 되돌릴 수 있습니다)`)) return;
+    const rest = (n.components || []).filter((c) => c.name !== b.dataset.compDel).map(compClean);
+    try { await post(`/api/components/node/${encodeURIComponent(n.id)}`, { components: rest }); } catch (e) { return toast("저장 실패: " + e.message); }
+    toast("요소를 뺐습니다"); await loadGraph(); select(n.id);
+  }));
+}
+
+function compClean(c) {
+  const o = {};
+  for (const k of ["name", "part", "title", "box", "regions", "flow", "spec", "check"]) if (c[k] !== undefined && c[k] !== null && c[k] !== "") o[k] = c[k];
+  return o;
+}
+
+async function openComponents(nodeId) {
+  state.comp = { node: nodeId, target: localGet("compTarget") || "chatgpt_web", edits: {} };
+  let o = {};
+  try { o = await api(`/api/components/open?node=${encodeURIComponent(nodeId)}`); } catch (e) { return toast("창을 열 수 없습니다: " + e.message); }
+  if (o.request && o.preview) return showCompPreview(o.request, o.preview);
+  try { await newCompRequest(); } catch (e) { return toast("요청을 만들 수 없습니다: " + e.message); }
+  renderCompRequest();
+  if (!$("#comp-dialog").open) $("#comp-dialog").showModal();
+}
+
+async function newCompRequest() {
+  const r = await api(`/api/components/request?node=${encodeURIComponent(state.comp.node)}&target=${state.comp.target}`);
+  Object.assign(state.comp, { rid: r.request, req: r });
+}
+
+function renderCompRequest() {
+  const t = state.comp, r = t.req, n = state.graph.nodes.find((x) => x.id === t.node);
+  const agent = state.graph.targets[t.target]?.kind === "agent";
+  $("#comp-title").textContent = `구성 요소 나누기: ${n?.label || t.node}`;
+  $("#comp-body").innerHTML = `
+    <p class="muted">AI가 이 이미지의 캐릭터·도형·구도 위치(좌표)와 그대로 다시 그릴 수 있는 설명을 정합니다. 앱은 AI를 직접 부르지 않습니다. 요청을 AI에게 주고 답을 여기에 붙여넣으세요. 반영하기 전에 잘라 낸 결과를 보여 주고, 상자를 끌어 고칠 수 있습니다.</p>
+    <div class="tidy-steps">
+      <div class="tidy-step"><b>1</b> AI에게 요청 보내기
+        <div class="row"><select id="comp-target">${Object.entries(state.graph.targets).map(([k, v]) => `<option value="${esc(k)}" ${k === t.target ? "selected" : ""}>${esc(v.label)}</option>`).join("")}</select>
+        <button class="primary small" id="comp-local" title="이 컴퓨터의 Claude Code·Codex로 바로 실행하고, 끝나면 미리보기를 엽니다">로컬 AI로 바로 실행</button></div>
+        ${agent ? `<div class="muted">에이전트는 원본과 격자 사본을 직접 열고 답을 <code>inbox/${esc(t.rid)}/out/plan.yaml</code>에 씁니다. 손잡이를 놓거나 요청을 붙여넣은 뒤, 다 쓰면 아래 "AI 답 확인"을 누르세요.</div>`
+          : `<div class="muted">요청 + 원본 + 좌표 격자 사본 3개를 넘깁니다. 손잡이를 대화창에 끌어다 놓거나, 요청을 복사하고 두 이미지를 직접 첨부하세요.</div>`}
+        <div class="handle" id="comp-handle" draggable="${TAURI ? "false" : "true"}"><span>⠿</span><div>분리 요청: 끌어다 놓기<small>${esc(state.graph.targets[t.target]?.label || t.target)} · 파일 ${r.files.length}개</small></div></div>
+        <div class="row"><button class="ghost small" id="comp-copy">요청 복사</button><a class="ghost small" href="${fileUrl(r.grid)}" target="_blank">격자 사본 보기</a></div></div>
+      <div class="tidy-step"><b>2</b> AI의 답 붙여넣기
+        <textarea id="comp-answer" rows="7" placeholder="AI가 준 plan.yaml 코드 블록을 그대로 붙여넣으세요 (앞뒤 설명이 섞여 있어도 됩니다)"></textarea>
+        <div class="row"><button class="primary" id="comp-receive">미리보기</button>${agent ? `<button class="ghost" id="comp-check">AI 답 확인</button>` : ""}<span class="muted">zip으로 받았다면 이 노드에 놓아도 됩니다</span></div></div>
+    </div>`;
+  $("#comp-apply").hidden = true;
+  const pkg = () => ({ files: r.files, clipboard: r.prompt, drag_icon: r.drag_icon, target_label: state.graph.targets[t.target]?.label || t.target, target: t.target });
+  bindHandle($("#comp-handle"), pkg, (p) => ({ target: p.target, kind: "components", node: t.node, request: t.rid }));
+  $("#comp-target").addEventListener("change", async (e) => { t.target = e.target.value; localSet("compTarget", t.target); await newCompRequest(); renderCompRequest(); });
+  $("#comp-copy").addEventListener("click", () => copy(r.prompt).then(() => { toast("요청을 복사했습니다. 원본과 격자 사본도 함께 첨부하세요"); record({ target: t.target, kind: "components", method: "copy", node: t.node, request: t.rid }); }));
+  $("#comp-local").addEventListener("click", () => {
+    const rid = t.rid;
+    ensureLocalAI("구성 요소 나누기", () => { $("#comp-dialog").close(); runLocal({ kind: "components", request: rid }, { label: "구성 요소 나누기",
+      onDone: async () => showCompPreview(rid, await post(`/api/components/${rid}/preview`, {})) }); });
+  });
+  $("#comp-receive").addEventListener("click", async () => {
+    const text = $("#comp-answer").value.trim();
+    if (!text) return toast("AI의 답을 먼저 붙여넣어 주세요");
+    try { showCompPreview(t.rid, await post(`/api/components/${t.rid}/receive`, { text })); } catch (e) { toast("읽을 수 없는 답입니다: " + e.message); }
+  });
+  $("#comp-check")?.addEventListener("click", async () => {
+    try { showCompPreview(t.rid, await post(`/api/components/${t.rid}/preview`, {})); } catch (e) { toast(e.message); }
+  });
+}
+
+/* 상자 편집기: 원본 위에 상자를 그리고 끌어서 옮기기·오른쪽 아래 모서리로 크기 바꾸기 */
+function boxEditorHtml(img, size, boxes) {
+  const [W, H] = size;
+  return `<div class="box-editor" id="box-editor"><img src="${fileUrl(img)}" alt="" draggable="false">${boxes.map((b, i) => {
+    const [x, y, w, h] = b.box;
+    return `<div class="bx${b.region ? " region" : ""}" data-i="${i}" style="left:${(x / W) * 100}%;top:${(y / H) * 100}%;width:${(w / W) * 100}%;height:${(h / H) * 100}%;--c:${BOX_COLORS[b.color % BOX_COLORS.length]}"><span>${esc(b.label)}</span><i></i></div>`;
+  }).join("")}</div>`;
+}
+
+function bindBoxEditor(size, boxes, onChange) {
+  const ed = $("#box-editor"); if (!ed) return;
+  const [W, H] = size;
+  ed.querySelectorAll(".bx").forEach((el) => {
+    el.addEventListener("pointerdown", (ev) => {
+      ev.preventDefault();
+      const b = boxes[+el.dataset.i], resize = ev.target.tagName === "I";
+      const r = ed.getBoundingClientRect(), sx = W / r.width, sy = H / r.height;
+      const start = [...b.box], x0 = ev.clientX, y0 = ev.clientY;
+      el.setPointerCapture(ev.pointerId);
+      const move = (e) => {
+        const dx = Math.round((e.clientX - x0) * sx), dy = Math.round((e.clientY - y0) * sy);
+        let [x, y, w, h] = start;
+        if (resize) { w = Math.max(8, Math.min(W - x, w + dx)); h = Math.max(8, Math.min(H - y, h + dy)); }
+        else { x = Math.max(0, Math.min(W - w, x + dx)); y = Math.max(0, Math.min(H - h, y + dy)); }
+        b.box = [x, y, w, h];
+        Object.assign(el.style, { left: `${(x / W) * 100}%`, top: `${(y / H) * 100}%`, width: `${(w / W) * 100}%`, height: `${(h / H) * 100}%` });
+      };
+      const up = () => { el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); if (start.join() !== b.box.join()) onChange(b); };
+      el.addEventListener("pointermove", move); el.addEventListener("pointerup", up);
+    });
+  });
+}
+
+function compBoxes(items) {
+  const boxes = [];
+  items.forEach((c, i) => {
+    if (c.box && c.part !== "composition") boxes.push({ name: c.name, label: `${PART_LABEL[c.part] || c.part} · ${c.title}`, box: [...c.box], color: i });
+    (c.regions || []).forEach((r, j) => boxes.push({ name: c.name, region: j, label: `구도 ${j + 1} · ${r.label}`, box: [...r.box], color: i }));
+  });
+  return boxes;
+}
+
+function editsFromBoxes(items, boxes) {
+  const edits = {};
+  for (const c of items) {
+    const own = boxes.filter((b) => b.name === c.name);
+    const main = own.find((b) => b.region === undefined);
+    if (main && main.box.join() !== (c.box || []).join()) (edits[c.name] ||= {}).box = main.box;
+    if (c.regions) {
+      const regions = c.regions.map((r, j) => ({ label: r.label, box: own.find((b) => b.region === j)?.box || r.box }));
+      if (JSON.stringify(regions) !== JSON.stringify(c.regions)) (edits[c.name] ||= {}).regions = regions;
+    }
+  }
+  return edits;
+}
+
+function showCompPreview(rid, pv) {
+  if (state.comp?.rid !== rid) state.comp = { checked: null };
+  state.comp = Object.assign(state.comp, { rid, pv, node: pv.node });
+  const checked = new Set(state.comp.checked || pv.items.filter((i) => i.checked).map((i) => i.name));
+  state.comp.checked = [...checked];
+  const st = { new: "새 요소", replace: "기존 요소 바꾸기", same: "같음" };
+  $("#comp-title").textContent = `구성 요소 미리보기: ${pv.title}`;
+  const boxes = compBoxes(pv.items);
+  $("#comp-body").innerHTML = `
+    ${pv.summary ? `<p><b>${esc(pv.summary)}</b></p>` : ""}
+    ${(pv.problems || []).map((p) => `<div class="issue warning">${esc(p)}</div>`).join("")}
+    <p class="muted">상자를 끌어 옮기고, 오른쪽 아래 모서리를 끌어 크기를 바꿀 수 있습니다. 놓으면 잘라 낸 그림이 다시 그려집니다. 체크한 요소만 반영합니다${pv.items.some((i) => i.status === "replace") ? " (같은 이름의 기존 요소 바꾸기는 기본으로 꺼져 있습니다)" : ""}.</p>
+    ${boxEditorHtml(pv.image, pv.size, boxes)}
+    <div class="comp-grid">${pv.items.map((c) => `
+      <label class="comp-card ${c.status}">
+        <img src="${fileUrl(c.image.split("?")[0])}?${c.image.split("?")[1] || ""}" alt="">
+        <div class="comp-text">
+          <div><input type="checkbox" data-comp-pick="${esc(c.name)}" ${checked.has(c.name) ? "checked" : ""}> <span class="chip">${esc(PART_LABEL[c.part] || c.part)}</span> <b>${esc(c.title)}</b> <span class="chip ${c.status === "replace" ? "warnchip" : ""}">${st[c.status]}</span></div>
+          <div class="muted comp-spec">${esc(c.spec || "설명 없음")}</div>
+          ${c.legend ? `<div class="meta-line">번호: ${esc(c.legend)}</div>` : ""}
+          ${(c.check || []).length ? `<ul class="checks">${c.check.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+        </div>
+      </label>`).join("")}</div>`;
+  bindBoxEditor(pv.size, boxes, async () => {
+    const edits = editsFromBoxes(pv.items, boxes); // 이번에 바뀐 것만, 서버가 앞선 수정과 합친다
+    try { showCompPreview(rid, await post(`/api/components/${rid}/preview`, { edits })); } catch (e) { toast(e.message); }
+  });
+  document.querySelectorAll("[data-comp-pick]").forEach((cb) => cb.addEventListener("change", () => {
+    const s = new Set(state.comp.checked); cb.checked ? s.add(cb.dataset.compPick) : s.delete(cb.dataset.compPick); state.comp.checked = [...s];
+  }));
+  const ap = $("#comp-apply"); ap.hidden = false; ap.textContent = "반영하기";
+  ap.onclick = async () => {
+    if (!state.comp.checked.length) return toast("반영할 요소를 하나 이상 고르세요");
+    try { await post(`/api/components/${rid}/apply`, { selected: state.comp.checked }); } catch (e) { return toast("반영 실패: " + e.message); }
+    $("#comp-dialog").close(); state.comp = null;
+    toast("구성 요소를 반영했습니다. 이 레퍼런스를 쓰는 세트의 드롭에 함께 첨부됩니다");
+    await loadGraph(); select(pv.node);
+  };
+  if (!$("#comp-dialog").open) $("#comp-dialog").showModal();
+}
+
+/* 이미 반영된 요소의 상자 고치기 → 바로 저장 (사람이 고친 것은 바로 반영, 전 상태 보관) */
+function editComponents(n) {
+  const items = JSON.parse(JSON.stringify(n.components || []));
+  const boxes = compBoxes(items);
+  const size = [n.extracted?.width, n.extracted?.height];
+  const draw = () => {
+    $("#comp-title").textContent = `상자 고치기: ${n.title}`;
+    $("#comp-body").innerHTML = `<p class="muted">상자를 끌어 옮기거나 오른쪽 아래 모서리로 크기를 바꾼 뒤 저장하세요. 저장하면 잘라 낸 그림과 구도 도식이 다시 그려집니다.</p>` + boxEditorHtml(n.file, size, boxes);
+    bindBoxEditor(size, boxes, () => {});
+    const ap = $("#comp-apply"); ap.hidden = false; ap.textContent = "저장";
+    ap.onclick = async () => {
+      const edits = editsFromBoxes(items, boxes);
+      const out = items.map((c) => compClean({ ...c, ...(edits[c.name] || {}) }));
+      try { await post(`/api/components/node/${encodeURIComponent(n.id)}`, { components: out }); } catch (e) { return toast("저장 실패: " + e.message); }
+      $("#comp-dialog").close(); toast("저장했습니다"); await loadGraph(); select(n.id);
+    };
+  };
+  if (!size[0]) {  // 추출 값이 없으면 이미지에서 크기를 읽는다
+    const im = new Image(); im.onload = () => { size[0] = im.naturalWidth; size[1] = im.naturalHeight; draw(); }; im.src = fileUrl(n.file);
+  } else draw();
+  if (!$("#comp-dialog").open) $("#comp-dialog").showModal();
+}
+$("#comp-close").addEventListener("click", () => $("#comp-dialog").close());

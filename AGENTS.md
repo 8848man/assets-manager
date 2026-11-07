@@ -14,6 +14,7 @@
 | 놓기(드롭) 동작, 예상 결과 선택지 | `core/drops.py` |
 | AI 요청과 결과(plan.yaml) 적용 | `core/folder_requests.py` |
 | 하위 정리 (진단·정리 요청·전후 비교) | `core/tidy.py` |
+| 레퍼런스 구성 요소 분리 (요청·격자·자르기·구도 도식·반영) | `core/components.py` |
 | 로컬 AI 도구 (찾기·설정·실행) | `core/local_ai.py` |
 | 스킬 (도구 스킬 설치, 세트 → 스킬, 설치된 스킬 읽기, 가져오기·붙이기, AI가 부르게 하기) | `core/skills.py`, `skills/assets-manager/` |
 | 작업 → 표준 찾기 (CLI·MCP `standard`) | `core/standards.py`, `core/cli.py` |
@@ -22,14 +23,14 @@
 | 파일 변경 감지·Library 캐시 | `engine.library_signature`, `server.library` |
 | 기록·버전·휴지통·Git·가져오기 | `core/store.py` |
 | API 경로 추가 | `core/server.py` (`do_GET`, `do_POST`) |
-| AI에게 주는 프롬프트 문구 | `authoring.py`(파일 등록), `folder_requests.render`(폴더 요청), `export_cmd.py`(내보내기 명령), `tidy.render`(하위 정리), `_defaults/keys.yaml`(키 지시문) |
+| AI에게 주는 프롬프트 문구 | `authoring.py`(파일 등록), `folder_requests.render`(폴더 요청), `components.render_request`(구성 요소 분리), `export_cmd.py`(내보내기 명령), `tidy.render`(하위 정리), `_defaults/keys.yaml`(키 지시문) |
 | 화면 | `ui/app.js` (빌드 없음, 콘솔 패널은 끝부분 `con*`), `ui/index.html`, `ui/style.css`, `ui/vendor/`(cytoscape, xterm) |
 | 데스크톱 셸 | `src-tauri/src/main.rs` |
 
 ## 명령
 ```
 # 라이브러리 루트(app의 상위)에서
-python -m unittest discover -s app/tests     # 테스트 (72개, 모두 통과해야 함)
+python -m unittest discover -s app/tests     # 테스트 (86개, 모두 통과해야 함)
 python app/core/server.py                    # 서버 → http://127.0.0.1:8765
 python app/core/extract.py <파일>             # 결정적 값 추출
 python app/core/rag.py                       # RAG JSONL 내보내기

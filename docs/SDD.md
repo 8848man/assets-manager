@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.12.2 · 기획서 v3.3(+14A~14G) 기준 · 2026-11-07
+앱 버전 0.13.0 · 기획서 v3.3(+14A~14H) 기준 · 2026-11-08
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -70,12 +70,13 @@
 
 | 파일 | 책임 | 주요 함수 / 클래스 | 의존 |
 |---|---|---|---|
-| `core/engine.py` | 로더, 검증, 상속 조립, 렌더, 패키지(한도·덜어내기·민감도), 변경 감지, 그래프·index | `Library`(`load`, `assemble`, `render`, `add_examples`, `package`, `changes`, `approve`, `graph`, `build_index`), `make_contact_sheet` | PyYAML, Pillow, `search`(지연 import) |
+| `core/engine.py` | 로더, 검증, 상속 조립, 렌더, 패키지(한도·덜어내기·민감도), 변경 감지, 그래프·index. 구성 요소 종류 기본값 `PART_DEFAULTS` | `Library`(`load`, `assemble`, `_attach_components`, `render`, `add_examples`, `package`, `changes`, `approve`, `graph`, `build_index`, `_ref_id`·`_ref_part`), `make_contact_sheet` | PyYAML, Pillow, `search`·`components`(지연 import) |
 | `core/server.py` | HTTP API, 정적 파일, 포트 인계(`/api/shutdown`), 레이아웃 저장 | `Handler`, `library()`, `node_detail`, `handle_drop`(v3.1 호환), `bind` | 모든 core 모듈 |
 | `core/drops.py` | 예상 결과 창: 놓은 것을 분류해 선택지 생성(stage), 실행(commit), 승격, 되돌리기 | `stage`, `commit`, `promote`, `undo`, `OPT` | `folder_requests`, `store` |
 | `core/folder_requests.py` | AI 요청의 수명: 준비 → 패키지 → 결과 수신 → 미리보기 → 적용. 원본 짝 맞추기 | `new_request`, `prepare`, `package`, `render`, `receive_zip`, `attach`, `auto_assign`, `assign`, `preview`, `apply`, `_set_rule` | `extract`, `store` |
 | `core/store.py` | 드롭 히스토리, 버전 보관, Git, 휴지통, 가져오기, 기본값 업데이트 | `append_history`, `read_history`, `backup_sync`, `fresh_files`, `versions_for`, `restore_version`, `git_commit`, `delete_node`, `restore_trash`, `import_items`, `import_zip`, `defaults_updates`, `upgrade_defaults` | git(선택) |
 | `core/authoring.py` | 파일 하나·여럿을 AI가 메타로 등록하게 하는 작성 프롬프트 (미등록·기존 노드 다시 쓰기) | `build`, `render` | `extract` |
+| `core/components.py` | 구성 요소 분리(v3.9, Q81-A): 메타 `components` 정리(`normalize`), 잘라 낸 그림·구도 도식 캐시(`ensure`, `.assets/components/`), AI 요청(좌표 격자 사본 + 프롬프트) → 답 받기 → 미리보기(상자 수정 합치기) → 반영, 사람이 고친 요소 저장 | `normalize`, `ensure`, `crop_image`, `composition_image`, `grid_image`, `build`, `render_request`, `receive`, `preview`, `apply`, `save`, `open_request` | `folder_requests`, `store`, `tidy.parse_plan_text`, Pillow |
 | `core/tidy.py` | 하위 정리: 범위(scope)·결정적 진단(diagnose) → AI 요청 프롬프트 → plan(ops) 메모리 시뮬레이션 → 전·후 그래프·변경 이유·프롬프트 비교 → 적용 | `scope`, `diagnose`, `build`, `receive`, `simulate`, `preview`, `apply` | `folder_requests`, `store` |
 | `core/local_ai.py` | 로컬 AI 도구 찾기(PATH·기본 설치 위치·직접 경로)·버전·연결 시험·설정, 기능별 요청 준비(`run_for`: tidy·request·authoring → 에이전트용 prompt 파일), 백그라운드 실행·로그·취소·결과 파일 확인 | `detect`, `status`, `update_config`, `test`, `run_for`, `start`, `get_job`, `cancel` | `folder_requests`, `tidy`, `authoring`(지연 import) |
 | `core/skills.py` | 스킬 연동: 도구 스킬 `assets-manager` 설치(시작 때), 세트 → 스킬 컴파일·내보내기(라이브러리 안/개인 폴더 × `.claude/skills`/`.agents/skills`)·고친 흔적 감지·제거, 설치된 스킬 읽기 → 그래프 노드 | `install_tool_skill`, `compile_set`, `status`, `export`, `remove`, `scan`, `graph_part` | `engine` |
@@ -92,7 +93,7 @@
 | `ui/app.js` | 화면 전체 (빌드 단계 없음) | `loadGraph`, `select`, `render*`, `refreshPackage`, `handleDrop`, `openOutcome`, `confirmOutcome`, `copyExport` | Cytoscape·xterm.js 5.5 + addon-fit(번들, `ui/vendor/`), Tauri 전역(`window.__TAURI__`) |
 | `src-tauri/src/main.rs` | 셸, 사이드카 실행(`py` → `python` 순서), 종료 처리 | `spawn_server` | tauri 2, tauri-plugin-drag 2 |
 | `defaults/` | 앱 번들 기본값 (`keys.yaml`, `targets.yaml`, `defaults.md`) — 라이브러리에 없으면 복사 | | |
-| `tests/` | 단위·통합 테스트 72개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console` | |
+| `tests/` | 단위·통합 테스트 86개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components` | |
 
 ## 5. 데이터 모델
 
@@ -101,7 +102,7 @@
 | `type` | `kind` | 원천 파일 | 비고 |
 |---|---|---|---|
 | `rule` | `defaults` / `principle` / `set` | md 프런트매터 (`type: rule`) | `inherits`(계층), `uses`(부품 원칙), `rules`, `priorities`, `precedence` |
-| `image` `web` `document` `writing` `skill` | `reference` | 원본 옆 `<이름>.meta.yaml` | `file`, `spec`, `check`, `extracted`, `relations` |
+| `image` `web` `document` `writing` `skill` | `reference` | 원본 옆 `<이름>.meta.yaml` | `file`, `spec`, `check`, `extracted`, `relations`, `components`(이미지, v3.9: 각 항목에 캐시 경로 `file`이 붙음) |
 | 위와 같음 | `output` | `outputs/<세트>/<이름>.meta.yaml` (`kind: output`) | `set`, `task`, `keywords`, `origin` |
 | 위와 같음 | `unregistered` | 레퍼런스 폴더의 메타 없는 파일 | id는 `new:<상대경로>` |
 | `ai` | `agent` / `chat` | `_defaults/targets.yaml` | 그래프 전용 (`ai:<대상>`) |
@@ -153,12 +154,17 @@ origin: { ts, target, prompt_hash, method }   # 산출물: 출처 드롭
 sensitivity: public | internal
 authored_by: chatgpt_web      # 작성한 AI (targets.yaml의 키)
 extracted: {...}              # extract.py 결과
+components:                   # v3.9 이미지만: 캐릭터·도형·구도로 나눈 요소 (Q81-A)
+  - { name: character, part: character, title: .., box: [x, y, w, h], spec: .., check: [..] }
+  - { name: block, part: shape, title: .., box: [..], spec: .. }
+  - { name: composition, part: composition, title: .., regions: [{label, box}], flow: [[x, y], ..], spec: .. }  # box 생략 = 전체
 relations: [{ type: variant_of | similar_to | pairs_with | supersedes | derived_from, target: <id> }]
 ```
 
-### 5.4 키 어휘 (`_defaults/keys.yaml`, version 3, 34개)
+### 5.4 키 어휘 (`_defaults/keys.yaml`, version 4, 35개)
 
 키마다 `label`, `domain`, `priority`(required/recommended/optional), `aliases`(동의어 경고), `instruction`, `ref_instruction`, `check`, `precedence`. 사용자 정의 키 허용(동의어면 경고). `domain: dev` 키 15개(설계 승인·문서 역할·충돌 처리 등)는 개발 착수 원칙 프리셋용. **조립은 키 단위 덮어쓰기라 한 세트에 붙는 원칙들은 서로 다른 키를 써야 한다**(같은 키 목록 병합은 미구현, 기획서 v3.4 열린 질문). 코드 안의 특수 키: `_example_<n>`(참고 예시, `priority: example` = 덜어내기 1순위).
+v4(v3.9): `shape_style`(도형, `image_style`보다 도형에 관해 우선) 추가, 최상위 `parts:` — 구성 요소 종류(character·shape·composition)마다 `label`, `key`(같은 측면의 규칙 키), `ref_instruction`(`{n} {file} {title}`), `check`(`{n}`). 라이브러리 keys.yaml에 `parts`가 없으면 `engine.PART_DEFAULTS`(같은 내용)를 쓴다. 렌더용 특수 모드 키: `<키>#<요소 이름>`(요소 하나의 attach/text/drop).
 
 ### 5.5 엣지
 
@@ -166,7 +172,7 @@ relations: [{ type: variant_of | similar_to | pairs_with | supersedes | derived_
 |---|---|---|
 | `inherits` | `global → naver-blog-post` | 예 (조립 엣지, 계층) |
 | `uses` | `ai-dev-kickoff —원칙→ dev-docs`, `naver-blog-post —스킬→ pdf-tools` | 예 (조립 엣지, 부품). 부품 원칙의 암묵적 `_defaults` 상속선은 그리지 않음 |
-| `key` | `naver-blog-post —chart_style→ naver-graph-style` | 예 (조립 엣지) |
+| `key` | `naver-blog-post —chart_style→ naver-graph-style` (값 `ref:<id>#<요소>`도 원본 노드로 이음, v3.9) | 예 (조립 엣지) |
 | `info` | `similar_to`, `variant_of`, 작성(`ai:* → 노드`), 드롭 N회(`세트 → ai:*`), 산출물(`세트 → 산출물`) | 아니오 |
 
 ## 6. 핵심 알고리즘
@@ -176,7 +182,7 @@ relations: [{ type: variant_of | similar_to | pairs_with | supersedes | derived_
 1-1. `sources(id)` (v3.4): 계층마다 그 계층이 `uses`로 붙인 원칙(`components`, 재귀·중복 제거)을 **계층 바로 앞**에 끼운다. 결과: 계층 자신 > 그 계층의 원칙(뒤에 붙인 것 우선) > 윗 계층. `descendants`도 `sources` 기준(원칙을 쓰는 세트가 영향 범위).
 1-2. `skills_of(id)` (v3.7): `sources` 순서대로 각 노드의 `uses` 중 스킬 노드를 모은다(중복은 처음 위치). 전역 원칙에 붙인 스킬은 상속으로 모든 세트에 들어간다. `descendants(스킬)`은 그 스킬을 받는 모든 규칙 노드.
 2. 그 순서로 규칙을 키 단위 덮어쓰기. 키마다 `source`, `overridden` 기록. `kind: defaults`에서 온 값은 `from_defaults`.
-3. 레퍼런스 값은 `ref_*` 필드와 `status`(ok / text_only / empty / missing)를 채운다.
+3. 레퍼런스 값은 `ref_*` 필드와 `status`(ok / text_only / empty / missing)를 채운다. v3.9 `_attach_components`: 원본에 요소가 있으면 `e.components`(요소별 `abs`, `spec`, `check`, `status`, `pkey`=짝 키, 구도 `legend`)를 붙이고 `components.ensure`로 그림 캐시를 맞춘다. 값이 `ref:<id>#<요소>`면 항목 자체가 그 요소(`ref_file`=잘라 낸 그림, `spec`·`check`=요소 것, `part_kind`, `legend`), 없는 요소면 `missing` + 검증 오류.
 4. 우선순위: `keys.yaml`의 `precedence` 기본값 → 상속 순서대로 세트의 `precedence`가 같은 키 쌍을 덮어씀. 둘 다 있는 쌍만 활성. 레퍼런스 첨부 순서는 "우선하는 쪽 먼저".
 5. 텍스트 항목은 키 어휘 순서, 레퍼런스 항목은 우선순위 순서로 정렬.
 
@@ -184,14 +190,15 @@ relations: [{ type: variant_of | similar_to | pairs_with | supersedes | derived_
 `# 작업 지침` → (`## 이번 작업`) → `## 규칙` → (`## 우선순위`: 키 쌍 문장 + 참고 예시 문장) → `## 첨부 레퍼런스` → `## 출력 전 자가 점검`(키 check + 레퍼런스 check, 중복 제거) → (경로 모드: `## 파일 경로` + 에이전트용 `## 더 찾아볼 수 있는 산출물`).
 `mode[key]`: `attach` | `text`(spec으로 대체) | `sheet`(컨택트 시트 칸) | `drop`(제외).
 함께 쓰는 스킬 (v3.7): `## 첨부 레퍼런스` 뒤, 자가 점검 앞에 `## 함께 쓰는 스킬` — 스킬마다 제목·설명·위치만(본문은 넣지 않고 "해당되면 읽고 따르라, 위 규칙이 우선"). 경로 모드는 SKILL.md 절대 경로, 채팅 대상은 첨부(패키지가 `<이름>.SKILL.md`로 복사해 이름이 겹치지 않게). 자가 점검에 "해당 스킬을 따랐는가" 한 줄.
+구성 요소 (v3.9, Q81-A, `emit_components`): 원본 항목 바로 아래에 들여 쓴 줄로 요소마다 `parts[part].ref_instruction` + (구도) `(도식 번호: 1 … · 2 …)` + `설명: spec`. 원본이 첨부면 번호 `[n-a]` `[n-b]`…, 원본이 시트면 새 정수 번호, 원본이 글(text)이면 요소도 글로(spec 없으면 뺌). 첨부 목록에 `[n-a] <id>.<요소>.png — 원본 제목 · 요소 제목`. 자가 점검에 `parts[part].check`(번호 채움) + 요소 `check`. 짝 키(`pkey`)가 조립 결과에 있고 원본의 키와 다르면 `## 우선순위`에 "{요소}에 관해서는 **{키}** 규칙을 분리한 요소(첨부 [n-a])보다 우선합니다. 규칙에 없는 부분은 요소를 따르세요." 요소가 없으면 v3.8과 글자 하나까지 같다.
 진행 방식 단락 (v3.4, Q73-A, `process_lines`): 게이트가 켜져 있으면 `## 이번 작업` 바로 뒤(규칙 앞)에 `## 진행 방식`을 넣는다 — 이해한 작업·결과물 구성·이미지 계획·확인할 것만 짧게 답하고 승인을 기다림(규칙 요약 금지), 승인 후에는 계획에 없는 것까지 규칙 전체·레퍼런스·자가 점검을 적용, 승인 전 금지는 결과물(본문·이미지·코드·파일) 만들기와 기존 파일 수정뿐(레퍼런스 열어 보기는 허용). 작업이 없으면 같은 단락 앞에 '레퍼런스를 살펴 두고 한 줄로 답한 뒤 기다리기'를 붙인다. 자가 점검 끝에 `GATE_CHECK` 한 줄을 더해 **프롬프트가 품질 기준으로 끝나게** 한다. 게이트를 끄면 아무것도 붙지 않아 v3.3 프롬프트와 글자 하나까지 같다. `gate`는 조립 순서에서 마지막으로 정한 노드가 이기고, 기본은 켜짐. 세 대상 앱에 같은 문장(P7). `canonical`에는 넣지 않는다.
 
 ### 6.3 패키지와 자동 덜어내기 (`Library.package`)
 - `add_examples(task)`: 같은 세트의 산출물을 `search`로 상위 3개(골든 샘플 제외) → `_example_n` 항목.
 - 위반 검사: 파일 수(prompt.md 포함), 파일 크기, 글자 수.
-- `trim=True`: 0) 크기 초과 파일 → 텍스트/제외 → 1) 첨부 → spec 텍스트 (example → optional → recommended → required) → 2) 이미지 2장 이상이면 컨택트 시트 → 3) 키 제외 (required 제외).
+- `trim=True`: 0) 크기 초과 파일 → 텍스트/제외(요소면 그 요소만) → 0-1) 구성 요소 첨부 → spec 텍스트(없으면 제외, 원본보다 먼저, v3.9) → 1) 첨부 → spec 텍스트 (example → optional → recommended → required) → 2) 이미지 2장 이상이면 컨택트 시트 → 3) 키 제외 (required 제외).
 - 민감 자료: 대상의 `allow_internal`이 false면 경고, `strip_sensitive`면 텍스트 대체.
-- 출력: `.assets/drops/<세트>/<대상>/prompt.md`(+ contact-sheet.png). `clipboard`는 항상 경로 포함판.
+- 출력: `.assets/drops/<세트>/<대상>/prompt.md`(+ contact-sheet.png). 요소 그림은 `.assets/components/<id>/`의 캐시 경로를 그대로 넘긴다. `entries[].components[].mode`로 요소별 결과를 돌려준다. `clipboard`는 항상 경로 포함판.
 
 ### 6.4 검색 (`search.search`)
 질의와 문서(title, keywords, task, tags, summary, spec, 텍스트 본문 6000자)를 단어(`w:`) + 3글자 조각(`g:`, 짧은 단어는 2글자)으로 쪼갠다. 점수 = Σ 필드 가중치 × BM25식 idf × (1 + log tf) × (단어 일치면 2배). 동점은 id 순 → 결정적.
@@ -251,6 +258,15 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 - **권한** `terminal.ensure_permissions`: 서버 시작·AI 탭 시작 때 `.claude/settings.json`의 `permissions.allow`에 `Bash(am)` `Bash(am *)` `Bash(python|py app/core/cli.py *)`, `deny`에 `Edit(./sets/**)` `Edit(./principles/**)` `Edit(./skills/**)` `Edit(./history/**)` `Edit(./index.md)` `Edit(./graph.json)`을 없는 것만 더한다. 사용자 항목은 그대로, JSON이 깨져 있으면 손대지 않는다. (`inbox/<rid>/out/` 아래 쓰기는 막지 않는다 — 기존 요청 흐름.)
 - **변경 감지·캐시** `engine.library_signature(root)`: 로더가 읽는 파일의 (상대 경로, 크기, 수정 시각) sha1 앞 16자. 앱이 쓰는 `index.md` `graph.json` `layout.json`과 숨김·제외 폴더는 뺀다. `server.library()`는 서명이 같으면 캐시한 `Library`를 돌려주고, `sync=True`면 항상 다시 읽는다. 그래프 노드마다 `sig`(노드 파일 크기·시각)가 붙어 UI가 바뀐 노드를 깜빡인다.
 
+### 6.12 구성 요소 분리 (`components`, v3.9, Q81-A)
+- `normalize(raw, parts, size)`: 저장 형식으로 정리하고 문제를 돌려준다. 알 수 없는 `part`·잘못된 이름(영문 소문자-하이픈)·box 없는 캐릭터/도형은 빼고 경고, 이름이 겹치면 `-2`를 붙인다. box가 이미지 밖이면 경고만(자를 때 맞춤). 로더가 부르고, 문제는 노드 이슈(warning).
+- 그리기(결정적): `crop_image`(box 자르기 + 흰 여백 4%, 최소 8px), `composition_image`(원본을 흰색과 62% 섞고 `regions` 번호 상자·`flow` 화살표, regions가 없으면 캐릭터·도형 box), `grid_image`(AI용: 20칸 이하가 되는 간격의 선 + 가장자리 좌표 숫자). `ensure`: 원본 크기·수정 시각·요소 목록의 sha1을 `stamp.txt`와 비교해 다를 때만 다시 그린다. 실패하면 False → 조립은 spec 글로 대체.
+- 요청: `build` → `request.json`(`kind: components`, status sent) + `src/<id>.grid.png` + `prompt.md`(`render_request`: 요소별 고르는 법, 좌표 규칙, 다시 그릴 수 있는 spec 쓰는 법, 추출 색, 지금 있는 요소, `plan.yaml` 형식; 에이전트는 절대 경로를 받고 `out/plan.yaml`에 직접 씀). 로컬 AI `run_for(kind: components)`는 에이전트용 프롬프트를 `prompt-local.md`에 쓴다.
+- 받기: 붙여넣기 `receive`(tidy와 같은 파서) · 에이전트의 `out/plan.yaml` · zip(`drops.stage`가 `case: components`).
+- `preview(rid, edits)`: 요소별 수정(`{name: {box?, regions?, title?, spec?}}`)을 `request.json.edits`에 합쳐 두고 plan에 덮은 뒤 `inbox/<rid>/preview/`에 그려 돌려준다. 항목 `status`: new(기본 체크) / replace(같은 이름의 기존 요소, 기본 해제, P6) / same.
+- `apply(rid, selected)`: 기존 순서 유지하며 같은 이름은 바꾸고 새 것은 뒤에 붙임 → `backup_sync` → 메타 다시 쓰기(다른 필드 보존, 짧은 목록은 한 줄 표기) → 요청 applied → 히스토리 `kind: components`.
+- `save(nid, comps)`: 상세 화면의 상자 고치기·빼기. 사람이 한 변경이라 바로 반영(P4), 쓰기 전 보관(P5), 형식 오류는 거부.
+
 ## 7. 폴더 구조와 수명
 
 | 경로 | 성격 | Git | 로더가 읽나 |
@@ -261,11 +277,12 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 | `layout.json` | 노드 위치 | 예 | 서버만 |
 | `history/drops.jsonl` | 드롭 히스토리 (정식 데이터) | 예 | 아니오 |
 | `history/versions/` `history/trash/` | 버전 보관, 휴지통 | **아니오** | 아니오 |
-| `inbox/<rid>/` | AI 요청 작업장 | **아니오** | 아니오 |
+| `inbox/<rid>/` | AI 요청 작업장 (구성 요소 요청은 `src/<id>.grid.png`, `preview/`도) | **아니오** | 아니오 |
 | `.assets/` | 캐시 (드롭 패키지, 스냅숏, 작성 패키지, export) + 기기별 설정 `local_ai.json`(지우면 다시 찾기)·로컬 AI 작업 기록 `local-ai/jobs/` | **아니오** | 아니오 |
 | `skills/<이름>/` | 라이브러리에 보관한 스킬(폴더째) | 예 | 예 (`SKILL.md`만 노드, 부속 파일은 노드 아님) |
 | `.claude/skills/` `.agents/skills/` | 라이브러리 안 스킬: 도구 스킬 `assets-manager`(앱이 맞춤) + 내보낸 세트 스킬 (파생물) | **아니오**(앱이 쓴 폴더만 `.gitignore`에 추가) | 아니오 (숨김 폴더) |
 | `.assets/skills-manifest.json` | 내보낸 스킬 기록 (경로별 세트·hash·SKILL.md 지문·파일 목록) | 아니오 | 아니오 |
+| `.assets/components/<id>/` | 구성 요소 캐시: `<id>.<요소>.png`(잘라 낸 그림·구도 도식) + `stamp.txt` (원본·요소가 같으면 다시 그리지 않음, 지우면 다시 그림) | 아니오 | 아니오 |
 | `.assets/console/undo.jsonl` | `am` 되돌리기 스택 (바뀌기 전 파일 내용) | 아니오 | 아니오 |
 | `.assets/bin/am` `am.cmd` | `am` 실행 파일 (서버 시작 때 이 PC의 Python·경로로 다시 씀) | 아니오 | 아니오 |
 | `.claude/settings.json` | 라이브러리에서 뜨는 Claude Code 권한: `am` 허용, 규칙 파일 직접 편집 금지 (앱은 빠진 항목만 더함) | 예 | 아니오 |
@@ -295,10 +312,13 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 | POST `/api/request/<rid>/apply` {selected} · `/discard` | 결과 적용·버리기 |
 | GET `/api/tidy?node&target[&goal=skill:<id>]` · `/api/tidy/open?node` | 하위 정리 요청 만들기(진단·프롬프트·현재 그래프) · 이 노드의 열린 정리 요청 |
 | POST `/api/tidy/<rid>/receive` {text} · `/preview` {selected} · `/apply` {selected} | AI 답 붙여넣기 → 미리보기 → 반영 |
+| GET `/api/components/request?node&target` · `/api/components/open?node` | 구성 요소 분리 요청 만들기(프롬프트·파일 3개·격자 사본·드래그 아이콘) · 이 노드의 열린 요청(답이 있으면 미리보기 포함) (v3.9) |
+| POST `/api/components/<rid>/receive` {text} · `/preview` {edits} · `/apply` {selected} | AI 답 붙여넣기 → 미리보기(상자 수정 합치기) → 반영 |
+| POST `/api/components/node/<id>` {components} | 반영된 요소 목록 저장(상자 고치기·빼기) |
 | POST `/api/request/<rid>/target` {node} | 결과를 둘 노드 지정(빈 공간에 놓은 경우) → 미리보기 |
 | GET `/api/local-ai` · `/api/local-ai/job/<jid>` | 로컬 AI 도구 상태(처음이면 찾기)·`ready` · 작업 상태와 로그 끝부분 |
 | POST `/api/local-ai/detect` · `/config` {default, tools{name:{enabled, custom_path, args}}} · `/test` {tool} | 다시 찾기 · 설정 · 연결 시험(짧은 질문, 최대 3분) |
-| POST `/api/local-ai/run` {kind: tidy\|request\|authoring, request?, files?, note?, tool?} · `/job/<jid>/cancel` | 실행(연결 안 됐으면 409 `needs_setup`) · 취소 |
+| POST `/api/local-ai/run` {kind: tidy\|components\|request\|authoring, request?, files?, note?, tool?} · `/job/<jid>/cancel` | 실행(연결 안 됐으면 409 `needs_setup`) · 취소 |
 | GET `/api/skills/set/<id>` | 세트 → 스킬 미리보기(SKILL.md, 설명, 첨부, 경고)·위치별 설치 상태(absent/ok/edited/foreign, stale) |
 | POST `/api/skills/export` {set, scope: library\|personal, agents: [claude, agents], overwrite} · `/api/skills/remove` {set, scope, agents, force} | 내보내기(고친 흔적·다른 스킬이 있으면 `conflicts`+diff로 멈춤) · 제거(앱이 쓴 파일만) |
 | POST `/api/skills/import` {path, node?, disable_original} · `/attach` {skill, node, detach?} · `/restore-original` {skill} | 설치된 스킬을 라이브러리로 가져오기(원래 SKILL.md는 `SKILL.md.disabled-by-assets-manager`로) · 붙이기/떼기 · 원래 스킬 되살리기 |
@@ -335,9 +355,11 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 | 앱 → AI (작업) | `prompt.md` + 레퍼런스 원본 (+ 경로 텍스트) | `engine.package` |
 | 앱 → AI (파일 등록) | 작성 프롬프트 (+ `extract.py`, 원본) | `authoring.build` |
 | 앱 → AI (폴더 요청) | 가이드 프롬프트 + `plan.yaml` 규격 (+ 시트·묶음) | `folder_requests.package` |
+| 앱 → AI (구성 요소 분리) | 분리 요청 프롬프트 + 원본 + 좌표 격자 사본 → `plan.yaml`의 `components` | `components.build` |
 | 사용자 → AI (내보내기) | 내보내기 명령 (붙여넣기) | `export_cmd.build` |
 | AI → 앱 | `assets-import.zip`: `plan.yaml`, `<폴더>/<이름>.meta.yaml`, 원본, 규칙 md / 또는 에이전트가 `inbox/<rid>/out/`에 직접 | `receive_zip`, `store.import_zip` |
 
+구성 요소 답 `plan.yaml`: `request`, `node`, `summary`, `components[{name, part, title, box, regions?, flow?, spec, check}]` (형식: `skills/assets-manager/references/components-format.md`).
 `plan.yaml`: `request?`, `summary`, `create[{path, reason}]`, `update[{node | "@target", set_rules{}, reason}]`, `relations[{from, type, to, reason}]`, `missing[]`.
 
 ## 11. UI 구조 (`ui/app.js`)
@@ -347,6 +369,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 - 라이브러리 스킬: 초록 태그 노드(`libskill`). 상세 `renderLibSkill`(설명, 붙인 노드·떼기, 상속으로 받는 세트, 붙이기+범위 안내 `scopeHint`, 원칙으로 풀기, 파일, 가져온 곳·되살리기). 규칙 상세의 `skillsHtml`(함께 쓰는 스킬 + 붙이기). 설치된 스킬 상세의 '앱으로 가져오기'(붙일 노드, 원래 스킬 끄기). 설정 창 `callerHtml`(개인 스킬·전역 지침 설치/제거, 직접 부르는 명령).
 - 하위 정리 창(`#tidy-dialog`): `openTidy` → (열린 요청이 있으면 이어서) 1 진단 · 2 요청 복사 · 3 답 붙여넣기 → `showTidyPreview`(왜, 전·후 미니 그래프 `miniGraph`, 최종 프롬프트 비교, 변경 체크) → `applyTidy` → `arrangeTidy`(세트는 깊이 순 아래로, 원칙은 오른쪽 줄, 레퍼런스는 왼쪽 줄로 다시 배치하고 저장).
 
+- 구성 요소(v3.9): 이미지 레퍼런스 상세의 `compsHtml`(요소 카드: 잘라 낸 그림, 종류, 설명, 점검, `ref:<id>#<요소>` 복사, 빼기 / `AI로 나누기`·`상자 고치기`). 창 `#comp-dialog`: `openComponents`(열린 요청에 답이 있으면 바로 미리보기) → `renderCompRequest`(대상 선택, 로컬 AI, 끌어 놓기 손잡이 = 프롬프트+원본+격자 사본, 요청 복사, 답 붙여넣기) → `showCompPreview`(상자 편집기 `boxEditorHtml`/`bindBoxEditor`: 끌어 옮기기·모서리로 크기, 놓으면 바뀐 것만 `preview`에 보내 다시 그림 / 요소 카드 체크 → 반영). `editComponents`는 같은 편집기로 반영된 요소를 고쳐 바로 저장. 세트 규칙 표의 레퍼런스 칸에 `+ 요소 N개`. 놓은 zip이 분리 답이면 `case: components`로 미리보기를 연다.
 - 콘솔 패널(`#console-panel`, 상단 `콘솔` 버튼·Ctrl+\`): 아래쪽, 높이 끌어 조절(localStorage `am.consoleH`). 처음 열 때 xterm을 만든다(`conInit`). **콘솔 탭**은 앱 안 줄 편집기(`conConsoleInput`: ←→ Home End, ↑↓ 기록 200줄, Tab 명령·노드 id 완성, Ctrl+C·L·U, 여러 줄 붙여넣기, 한글 폭 2칸 계산) → `POST /api/console` → 출력 → 바뀐 노드가 있으면 `conRefresh`. **AI 탭**(`+ AI` 선택 → `conAddAI`)은 xterm ↔ `/api/term/*`(입력 8ms 모아 보내기, 긴 폴링 `conReadLoop`, 창 크기 `fit`). 탭 × = 프로세스 종료. 스크롤백 5000줄.
 - 실시간 반영: `conPoll`이 창이 보이고 포커스일 때 2초(아니면 4초, 요청 없음)마다 `/api/changes` → 서명이 바뀌면 `conRefresh`(대화상자가 열려 있으면 닫힌 뒤) → `loadGraph` 후 노드 `sig`가 달라진 노드에 `.flash`(2.4초).
 - 상태: 전역 `state` (graph, cy, selected, target, authorTarget, pkg, opts, tasks, outcome, request, requestPkg). 사용자 편의 설정만 localStorage(`am.*`).
@@ -372,6 +395,7 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 | `test_local_ai.py` | 로컬 AI 도구: 찾기(직접 경로)·버전·연결 시험, 연결 안 됐을 때 오류, 실행 → 결과 파일 → 정리 미리보기, 결과 파일이 없으면 failed. 가짜 도구(POSIX는 shebang 스크립트, Windows는 `.cmd`로 감쌈) |
 | `test_skills.py` | 도구 스킬 설치(다시 해도 같음), 세트 → 스킬 컴파일(이식 가능한 프런트매터·결정성), 내보내기·고친 흔적 감지·제거, 다른 스킬은 덮어쓰지 않고 읽기만 |
 | `test_standards.py` | 스킬 노드 보관·붙이기·조립, 표준 찾기·`cli.py standard`, 설치된 스킬 가져오기(원래 끄기), 스킬 폴더를 노드에 놓기, AI가 부르게 하기(개인 스킬·전역 지침 줄), 원칙으로 풀기 요청, 스킬 휴지통(폴더째) |
+| `test_components.py` | 구성 요소: 메타 정리·경고, 원본 + 요소 첨부 렌더·파일 생성, 결정성(같은 PNG·프롬프트), 규칙 우선 문장, `ref:<id>#<요소>`·없는 요소 오류, 덜어내기(요소 먼저 글로), 요소 없으면 프롬프트 그대로, 요청 왕복(격자·붙여넣기·상자 수정·반영·다른 필드 보존), 기존 요소 바꾸기 기본 꺼짐·에이전트 경로, zip → `case: components`, 사람 수정 저장, 스킬 내보내기에 요소 포함 |
 | `test_console.py` | `am` set·unset·undo(본문 보존), use·inherit·순환 거부, new·rename·기록의 actor, 오류, 명령줄 연결(`cli.py set`·`standard`), 파일 서명, `.claude/settings.json` 합치기(사용자 항목 유지·깨진 JSON 보존), `am` 실행 파일, POSIX pty 세션(환경·한글 입출력·1개 제한·종료) |
 
 UI는 자동 테스트가 없다. 변경 후 브라우저 모드(`start.bat browser`)로 확인한다.
@@ -388,6 +412,7 @@ UI는 자동 테스트가 없다. 변경 후 브라우저 모드(`start.bat brow
 | 하고 싶은 것 | 고칠 곳 |
 |---|---|
 | 새 키 | `_defaults/keys.yaml`(+ `app/defaults/keys.yaml`, `version` 올리기) |
+| 새 구성 요소 종류 | `keys.yaml`의 `parts:`(+ `engine.PART_DEFAULTS`), 요청 문구 `components.render_request`, UI `PART_LABEL` |
 | 새 드롭 대상 AI | `targets.yaml`에 항목 추가(`kind: agent|chat`) |
 | 새 레퍼런스 타입 | `engine.REF_TYPES`, `REF_FOLDERS`, `EXT_TYPE`, `store.TYPE_FOLDER`/`EXT_TYPE`, `extract.kind_of`, UI `TYPE_LABEL` |
 | 예상 결과 선택지 | `drops.OPT`, `stage`의 분기, `commit`의 실행부, UI `choiceHtml` |

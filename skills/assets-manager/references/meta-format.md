@@ -16,6 +16,7 @@ tags: [..]
 sensitivity: public               # 회사 내부 자료면 internal
 authored_by: claude_desktop | codex | chatgpt_web
 extracted: {...}                  # extract.py 결과 그대로
+components: [...]                 # 이미지만. 캐릭터·도형·구도로 나눈 요소 (앱의 '구성 요소 나누기' 요청으로만 씀, components-format.md)
 ```
 - `spec`에는 보이는 것만 쓴다. 추측한 의도나 평가를 쓰지 않는다.
-- 레퍼런스가 여러 역할(캐릭터·사물·화풍·구도)을 섞고 있으면 `spec`을 역할별 문단으로 나눠 쓴다.
+- 레퍼런스가 여러 역할(캐릭터·사물·화풍·구도)을 섞고 있으면 `spec`을 역할별 문단으로 나눠 쓴다. 파일 등록 때는 `components`를 쓰지 않는다(사용자가 앱에서 따로 요청한다).
