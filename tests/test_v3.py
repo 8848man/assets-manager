@@ -148,7 +148,7 @@ class V3Test(unittest.TestCase):
         rule(self.root, "a.md", "a", None, "  tone: x\n")
         r = store.backup_sync(self.lib(), "첫 기록")
         self.assertTrue(r["git"].get("committed"))
-        log = subprocess.run(["git", "log", "--oneline"], cwd=self.root, capture_output=True, text=True).stdout
+        log = subprocess.run(["git", "log", "--oneline"], cwd=self.root, capture_output=True, text=True, encoding="utf-8").stdout
         self.assertIn("첫 기록", log)
         with open(os.path.join(self.root, ".gitignore"), encoding="utf-8") as f:
             ignored = f.read()

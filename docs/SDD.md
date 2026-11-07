@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.12.0 · 기획서 v3.3(+14A~14G) 기준 · 2026-11-07
+앱 버전 0.12.1 · 기획서 v3.3(+14A~14G) 기준 · 2026-11-07
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -21,16 +21,16 @@
 | P1 | **파일이 기준, 나머지는 파생물.** `index.md`, `graph.json`, `.assets/`, 검색 결과, RAG JSONL은 언제든 다시 만들 수 있어야 한다 | Q11, Q17 | `engine.build_index`, `rag.py`, `search.py` |
 | P2 | **조립은 결정적.** 같은 폴더 상태 + 같은 세트 + 같은 작업 설명 → 글자 하나까지 같은 프롬프트. 조립 경로에 AI 호출·난수·현재 시각 금지 | Q11, Q58 | `Library.assemble/render/package` |
 | P3 | **앱은 외부 AI API를 부르지 않는다.** 해석은 외부 AI가 프롬프트를 받아 하고, 결과는 파일로 돌아온다. 예외(v3.5): 사용자가 설정에서 연결한 **로컬 AI 명령줄 도구**(Claude Code, Codex CLI)를 **사용자가 누른 버튼으로만** 실행한다. API 키는 받지 않고, 도구가 이미 로그인한 구독을 쓴다. 프롬프트는 기존 에이전트용 그대로(P2), 결과는 파일 → 미리보기 → 적용(P4) | Q36, Q41, Q76 | 모든 모듈, `local_ai.py` |
-
-P3 보충(v3.8): 콘솔 패널의 **AI 탭**은 사용자가 `+ AI`를 눌러 연 대화형 터미널이다. 앱은 입력을 보내지 않고 사용자 키 입력만 전달한다(자동 실행 없음).
 | P4 | **사람이 넣은 단순한 것은 바로 반영, AI가 만든 구조는 미리 보고 확정** (예상 결과 창, 기본 켜짐) | Q38, Q49, Q67 | `drops.py`, `folder_requests.preview/apply` |
 | P5 | **막지 말고 되돌릴 수 있게.** 변경 전 버전 보관, 삭제는 휴지통, Git 자동 커밋 | Q39 | `store.backup_sync`, `delete_node`, `undo` |
 | P6 | **AI는 기존 파일을 직접 고치지 않는다.** 바꿀 것은 `plan.yaml`로 받고 앱이 키 단위로 적용. 키 삭제 불가, 덮어쓰기는 기본 꺼짐. 예외: 하위 정리(`tidy`)는 구조 변경이라 키 이동·규칙 노드 휴지통을 허용하되, 정리 전·후 **최종 프롬프트 비교**를 반드시 보여 준다 | Q51, Q53, Q72 | `folder_requests.preview/apply`, `_set_rule`, `tidy.preview` |
-
-P6 보충(v3.8): AI 탭의 Claude Code·Codex가 노드를 바꾸는 길은 **`am` 명령**뿐이다. `am`은 앱 함수로 키 단위로 쓰고, 바꾸기 전 보관(P5)·`am undo`·히스토리(`actor: ai-tab`)를 남긴다. 라이브러리 `.claude/settings.json`이 규칙 파일 직접 편집을 막는다(`deny`). Codex는 이런 권한 파일이 없어 루트 `AGENTS.md`의 규칙으로만 막는다. 구조를 크게 바꾸는 일은 `am tidy` → 앱 미리보기(P4).
 | P7 | **패키지 동등성.** 세 대상 앱이 받는 프롬프트 본문은 같다. 차이는 경로 단락과 에이전트용 "더 찾아볼 산출물" 단락뿐 | Q20, Q61 | `render(paths=...)` |
 | P8 | **민감도는 조립 결과에서 계산.** 상속되는 속성이 아님. RAG 내보내기는 민감 노드 제외가 기본 | Q27 | `package`, `rag.chunks` |
 | P9 | **기본값은 레이어 0.** `_defaults/`에 복사된 파일이 기준. 앱 업데이트는 알림 후 사용자가 적용 | Q16, Q17 | `ensure_defaults`, `store.defaults_updates` |
+
+보충 (v3.8):
+- **P3** — 콘솔 패널의 **AI 탭**은 사용자가 `+ AI`를 눌러 연 대화형 터미널이다. 앱은 입력을 보내지 않고 사용자 키 입력만 전달한다(자동 실행 없음).
+- **P6** — AI 탭의 Claude Code·Codex가 노드를 바꾸는 길은 **`am` 명령**뿐이다. `am`은 앱 함수로 키 단위로 쓰고, 바꾸기 전 보관(P5)·`am undo`·히스토리(`actor: ai-tab`)를 남긴다. 라이브러리 `.claude/settings.json`이 규칙 파일 직접 편집을 막는다(`deny`). Codex는 이런 권한 파일이 없어 루트 `AGENTS.md`의 규칙으로만 막는다. 구조를 크게 바꾸는 일은 `am tidy` → 앱 미리보기(P4).
 
 ## 3. 전체 구조
 
@@ -211,6 +211,9 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 - 자동 연결(`auto_links`, Q70-C, v3.4 수정): 노드에 놓은 결과는 AI가 연결을 비워도 생성 항목마다 `link` 항목을 붙인다. 새 원칙 → 놓은 노드가 `uses`로 붙임(기본값 아래면 `child_of`), 부품 원칙에 놓은 새 세트 → 그 세트가 원칙을 `uses`(`uses_target`), 그 밖의 새 규칙 노드 → `inherits`에 대상 추가(`_defaults` 제거), 세트 아래 산출물 → 적용 때 `set` 지정(링크 생략), 레퍼런스 아래 비규칙 → `variant_of`, 그 밖 → `child_of`(정보 엣지). 빈 공간에 놓아 대상이 없으면 UI가 대상을 물어 `set_target`으로 다시 미리보기.
 - `apply`: 의존성이 끊긴 항목은 자동 제외. 산출물은 `outputs/<set>/`, 원본 없으면 메타만. 규칙은 `_set_rule`로 키만 수정(엣지 note 보존).
 
+### 6.6 예상 결과 (`drops.stage` → `drops.commit`)
+`stage`는 놓은 것을 분류해 `{sid, case, what, where, options, details, simple}`을 돌려준다. `case`: result(plan 있는 zip) | zip | files. 선택지 표는 기획서 v3.3 14.4. `simple=True`(빈 공간에 놓은 파일, 결과 없는 zip)만 설정이 꺼졌을 때 창 없이 실행된다. `commit`은 실행 전 `backup_sync`를 하고 `created`(되돌리기 대상)를 돌려준다.
+
 ### 6.7 하위 정리 (`tidy`, Q72-A)
 - `scope(root)`: 기준 노드 + 상속 자식 + 부품 원칙 + 계층이 아닌 상속 원칙(다른 규칙을 상속하거나 범위 안에서만 상속됨) + 키 레퍼런스 + 정보 연결 + 세트의 산출물. 범위 밖 부모(전역 원칙 등)는 흐리게만 보여 준다.
 - `diagnose`: `redundant_inherit`(직접·간접 중복 상속), `principles_as_parents`(원칙 2개 이상 상속), `principle_inherits`(원칙이 다른 규칙을 상속), `shadowed_key`(원칙끼리 같은 키 덮어씀), `repeated_relation`(같은 연결 3개 이상), `unused_principle`, `empty`.
@@ -248,9 +251,6 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 - **권한** `terminal.ensure_permissions`: 서버 시작·AI 탭 시작 때 `.claude/settings.json`의 `permissions.allow`에 `Bash(am)` `Bash(am *)` `Bash(python|py app/core/cli.py *)`, `deny`에 `Edit(./sets/**)` `Edit(./principles/**)` `Edit(./skills/**)` `Edit(./history/**)` `Edit(./index.md)` `Edit(./graph.json)`을 없는 것만 더한다. 사용자 항목은 그대로, JSON이 깨져 있으면 손대지 않는다. (`inbox/<rid>/out/` 아래 쓰기는 막지 않는다 — 기존 요청 흐름.)
 - **변경 감지·캐시** `engine.library_signature(root)`: 로더가 읽는 파일의 (상대 경로, 크기, 수정 시각) sha1 앞 16자. 앱이 쓰는 `index.md` `graph.json` `layout.json`과 숨김·제외 폴더는 뺀다. `server.library()`는 서명이 같으면 캐시한 `Library`를 돌려주고, `sync=True`면 항상 다시 읽는다. 그래프 노드마다 `sig`(노드 파일 크기·시각)가 붙어 UI가 바뀐 노드를 깜빡인다.
 
-### 6.6 예상 결과 (`drops.stage` → `drops.commit`)
-`stage`는 놓은 것을 분류해 `{sid, case, what, where, options, details, simple}`을 돌려준다. `case`: result(plan 있는 zip) | zip | files. 선택지 표는 기획서 v3.3 14.4. `simple=True`(빈 공간에 놓은 파일, 결과 없는 zip)만 설정이 꺼졌을 때 창 없이 실행된다. `commit`은 실행 전 `backup_sync`를 하고 `created`(되돌리기 대상)를 돌려준다.
-
 ## 7. 폴더 구조와 수명
 
 | 경로 | 성격 | Git | 로더가 읽나 |
@@ -270,7 +270,8 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 | `.assets/bin/am` `am.cmd` | `am` 실행 파일 (서버 시작 때 이 PC의 Python·경로로 다시 씀) | 아니오 | 아니오 |
 | `.claude/settings.json` | 라이브러리에서 뜨는 Claude Code 권한: `am` 허용, 규칙 파일 직접 편집 금지 (앱은 빠진 항목만 더함) | 예 | 아니오 |
 | `index.md` `graph.json` | 자동 생성 | **아니오** | 아니오 |
-| `app/` | 앱 코드 | **아니오** (라이브러리 기록과 분리) | 아니오 |
+| `app/` | 앱 코드. **자체 Git 저장소 `app/.git`** (라이브러리 기록과 분리: 루트 `.gitignore`의 `app/`은 `store.GITIGNORE_LINES`가 유지). `app/.gitignore`: `node_modules/` `src-tauri/target/` `src-tauri/gen/` `__pycache__/` `*.log` | 루트: 아니오 / app: 예 | 아니오 |
+| `app/docs/archive/` | 옛 기획서 v1~v3.2 (결정 Qnn의 배경). 현재 기준은 루트의 `assets_manager_기획서_v3.3.md` | app | 아니오 |
 
 로더 제외 목록: `engine.SKIP_DIRS`(`app`, `history`, `inbox`, 숨김 폴더). Git 제외 목록: `store.GITIGNORE_LINES`(없는 줄만 자동 추가).
 
@@ -368,6 +369,9 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 | `test_requests.py` | 폴더 요청: 준비, 시트·묶음, 결과 미리보기·적용, 덮어쓰기, 잘못된 plan |
 | `test_v33.py` | 검색, 참고 예시·덜어내기, stage 선택지, commit(산출물·원본·변형·골든·승격·되돌리기), 요청 없는 zip·`@target`·짝 맞추기, 내보내기 명령, RAG, MCP(stdio 실제 프로세스), 노드 종류별 자동 연결, 개발 착수 프리셋 조립, `uses` 조립 순서, 하위 정리 왕복(프롬프트 동일·쓰이는 노드 휴지통 거부·값 변경 감지), 승인 게이트·작업 대기 끝 단락 |
 
+| `test_local_ai.py` | 로컬 AI 도구: 찾기(직접 경로)·버전·연결 시험, 연결 안 됐을 때 오류, 실행 → 결과 파일 → 정리 미리보기, 결과 파일이 없으면 failed. 가짜 도구(POSIX는 shebang 스크립트, Windows는 `.cmd`로 감쌈) |
+| `test_skills.py` | 도구 스킬 설치(다시 해도 같음), 세트 → 스킬 컴파일(이식 가능한 프런트매터·결정성), 내보내기·고친 흔적 감지·제거, 다른 스킬은 덮어쓰지 않고 읽기만 |
+| `test_standards.py` | 스킬 노드 보관·붙이기·조립, 표준 찾기·`cli.py standard`, 설치된 스킬 가져오기(원래 끄기), 스킬 폴더를 노드에 놓기, AI가 부르게 하기(개인 스킬·전역 지침 줄), 원칙으로 풀기 요청, 스킬 휴지통(폴더째) |
 | `test_console.py` | `am` set·unset·undo(본문 보존), use·inherit·순환 거부, new·rename·기록의 actor, 오류, 명령줄 연결(`cli.py set`·`standard`), 파일 서명, `.claude/settings.json` 합치기(사용자 항목 유지·깨진 JSON 보존), `am` 실행 파일, POSIX pty 세션(환경·한글 입출력·1개 제한·종료) |
 
 UI는 자동 테스트가 없다. 변경 후 브라우저 모드(`start.bat browser`)로 확인한다.
@@ -375,6 +379,7 @@ UI는 자동 테스트가 없다. 변경 후 브라우저 모드(`start.bat brow
 ## 13. 실행과 배포
 
 - `start.bat`(라이브러리 루트): Python 확인 → 패키지 설치(최초) → (선택) AI 탭용 `pywinpty` 설치, 실패해도 계속 → 8765 포트의 이전 서버 정리 → 빌드된 exe / `npm run dev` / 브라우저 모드. 메시지는 영문만(cmd 한글 파싱 문제).
+- 앱 코드 이력: `app/`에서 `git log`. 코드를 바꾼 작업은 끝날 때 `app/`에서 커밋한다(라이브러리 데이터의 자동 기록과 별개).
 - 서버 시작 시 포트가 막혀 있으면 이전 서버에 `/api/shutdown`을 요청하고 인계받는다.
 - exe는 빌드한 PC의 `app/` 경로를 기준으로 사이드카를 찾는다(`CARGO_MANIFEST_DIR`). 다른 PC 배포는 3단계.
 

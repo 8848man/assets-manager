@@ -5,7 +5,7 @@
 ## 먼저 읽을 것 (순서대로)
 1. `docs/SDD.md` — 구조, 모듈 지도, 데이터 모델, 알고리즘, API. **2장의 설계 원칙(P1~P9)은 어기면 안 된다.**
 2. 바꾸려는 모듈의 파일 상단 docstring
-3. 왜 그렇게 정했는지가 궁금하면 `../assets_manager_기획서_v3.3.md` (결정마다 `Qnn` 번호)
+3. 왜 그렇게 정했는지가 궁금하면 `../assets_manager_기획서_v3.3.md` (결정마다 `Qnn` 번호) · 옛 판(v1~v3.2)은 `docs/archive/`
 
 ## 빠른 지도
 | 하려는 일 | 파일 |
@@ -48,7 +48,8 @@ cd app && npm run dev                        # 데스크톱 앱 (Rust ≥ 1.90)
 - **로더 제외 폴더:** 새 작업 폴더를 라이브러리 루트에 만들면 `engine.SKIP_DIRS`와 `store.GITIGNORE_LINES`에도 넣는다(안 넣으면 보관 사본이 노드로 다시 읽혀 id 중복이 난다).
 - **기본값 변경:** `_defaults/*.yaml`을 바꾸면 `app/defaults/`에도 같이 반영하고 `version`을 올린다(사용자는 상단 알림으로 적용).
 - **버전 표시:** 서버·UI 동작을 바꾸면 `server.py`와 `ui/app.js`의 `APP_VERSION`을 같이 올린다.
-- **Windows:** 사용자는 Windows에서 실행한다. 경로는 `os.path`로 다루고 저장은 `/` 상대 경로, 파일은 항상 `with open(...)`으로 닫는다(파일 잠금). `start.bat`에는 영문만 쓴다.
+- **Windows:** 사용자는 Windows에서 실행한다. 경로는 `os.path`로 다루고 저장·비교는 `/` 상대 경로(`relpath` 결과는 항상 `.replace("\\", "/")`), 파일은 항상 `with open(...)`으로 닫는다(파일 잠금). `start.bat`에는 영문만 쓴다.
+- **커밋:** `app/`은 자체 Git 저장소다(라이브러리 루트의 Git과 별개). 작업을 마치면 테스트 통과 후 `app/`에서 커밋한다. 메시지에 기획서 `Qnn`이나 고친 내용을 쓴다.
 - **테스트:** 기능을 바꾸면 `app/tests/`에 테스트를 추가하고 전체를 돌린다. UI는 브라우저 모드로 확인한다.
 - **노드 쓰기는 앱 함수로:** 규칙 노드를 바꾸는 새 기능은 `console`/`folder_requests._set_rule`/`_rewrite_frontmatter`를 쓴다(키 단위, 본문 보존). 라이브러리 `.claude/settings.json`이 `sets/` `principles/` `skills/` 직접 편집을 막으므로, 이 저장소에서 데이터를 고칠 때도 `am`을 쓴다.
 - **리소스:** 백그라운드 프로세스·폴링은 사용자가 연 화면에서만. 새 폴링은 `document.visibilityState`·`hasFocus()`를 확인하고, 서버 쪽 대기는 긴 폴링(조건 변수)으로.

@@ -50,7 +50,7 @@ def library_signature(root: str) -> str:
                 st = os.stat(os.path.join(dirpath, fn))
             except OSError:
                 continue
-            h.update(f"{os.path.relpath(os.path.join(dirpath, fn), root)}|{st.st_size}|{st.st_mtime_ns}\n".encode("utf-8"))
+            h.update(f"{os.path.relpath(os.path.join(dirpath, fn), root).replace(os.sep, '/')}|{st.st_size}|{st.st_mtime_ns}\n".encode("utf-8"))
     return h.hexdigest()[:16]
 
 
@@ -82,7 +82,7 @@ class Library:
 
         candidates: list[str] = []
         for dirpath, dirnames, filenames in os.walk(self.root):
-            rel_dir = os.path.relpath(dirpath, self.root)
+            rel_dir = os.path.relpath(dirpath, self.root).replace("\\", "/")  # Windows: 항상 / 로 비교
             dirnames[:] = sorted(d for d in dirnames if not d.startswith(".") and d not in SKIP_DIRS)
             if rel_dir == ".":
                 rel_dir = ""

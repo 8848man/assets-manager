@@ -44,8 +44,12 @@ class LocalAiTests(unittest.TestCase):
     def setUp(self):
         self.d = tempfile.mkdtemp()
         write(self.d, "sets/s.md", "---\nid: s\ntype: rule\nkind: set\ntitle: 세트\nrules:\n  tone: 존댓말\n---\n")
-        self.tool = write(self.d, "_bin/fake-claude", FAKE.replace("{py}", sys.executable))
-        os.chmod(self.tool, os.stat(self.tool).st_mode | stat.S_IEXEC)
+        script = write(self.d, "_bin/fake-claude.py", FAKE.replace("{py}", sys.executable))
+        if os.name == "nt":  # Windows는 shebang을 모른다: 실제 npm 설치처럼 .cmd로 감싼다 (local_ai가 cmd /c로 실행)
+            self.tool = write(self.d, "_bin/fake-claude.cmd", f'@"{sys.executable}" "%~dp0fake-claude.py" %*\n')
+        else:
+            self.tool = script
+            os.chmod(self.tool, os.stat(self.tool).st_mode | stat.S_IEXEC)
         os.environ.pop("FAKE_NO_OUTPUT", None)
 
     def tearDown(self):
