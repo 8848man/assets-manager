@@ -1,0 +1,12 @@
+[package]
+name = "assets-manager"
+version = "0.1.0"
+description = "Assets Manager — 상속형 레퍼런스 그래프와 드롭 엔진"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-drag = "2"

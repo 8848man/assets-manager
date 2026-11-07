@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Assets Manager</title>
+<link rel="stylesheet" href="vendor/xterm.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">Assets Manager <span class="root" id="root"></span></div>
+  <div class="top-actions">
+    <button class="banner" id="defaults-btn" hidden title="앱에 새 기본값이 있습니다. 누르면 적용하고 이전 판은 보관합니다."></button>
+    <button class="banner result" id="result-btn" hidden></button>
+    <button class="banner" id="changes-btn" hidden></button>
+    <button class="ghost" id="unreg-btn" hidden title="등록되지 않은 파일로 이동"></button>
+    <button class="ghost" id="export-btn" title="AI 대화창에 붙여넣으면 그 대화의 결과물을 zip으로 묶어 줍니다. zip은 넣을 노드 위에 놓으세요">내보내기 명령 복사</button>
+    <button class="ghost" id="mcp-btn" title="Claude 데스크톱 MCP 연결, RAG 내보내기">AI 비서 연결</button>
+    <button class="ghost" id="console-btn" title="콘솔: am 명령으로 노드를 보고 바꾸기, AI 탭에서 Claude Code·Codex 열기 (Ctrl+`)">콘솔</button>
+    <button class="ghost" id="settings-btn" title="설정: 로컬 AI 도구 연결">설정</button>
+    <span class="chip backup" id="backup"></span>
+    <button class="ghost" id="trash-btn">휴지통</button>
+    <label class="toggle"><input type="checkbox" id="show-ai"> AI</label>
+    <label class="toggle" title="설치된 스킬(라이브러리 안·개인 폴더)을 그래프에 보여 줍니다"><input type="checkbox" id="show-skills"> 스킬</label>
+    <label class="toggle" title="켜면 놓을 때마다 무슨 일이 일어날지 먼저 보여 줍니다"><input type="checkbox" id="show-outcome"> 예상 결과</label>
+    <label class="toggle"><input type="checkbox" id="advanced"> 고급</label>
+    <button class="ghost" id="layout-reset" title="자동 배치로 다시 정렬하고 저장">배치 초기화</button>
+    <button class="ghost" id="reload" title="폴더 다시 읽기">새로고침</button>
+  </div>
+</header>
+<main class="layout">
+  <section class="graph-pane">
+    <div id="graph"></div>
+    <div class="legend">
+      <span><i class="ln solid"></i>AI에게 전달됨</span>
+      <span><i class="ln dashed"></i>참고 정보 (전달 안 됨)</span>
+      <span><i class="ln accent"></i>원칙·키 (세트의 부품)</span>
+      <span><i class="dot skill"></i>스킬</span>
+      <span><i class="dot defaults"></i>기본값</span>
+      <span><i class="dot rule"></i>규칙</span>
+      <span><i class="dot ref"></i>레퍼런스</span>
+      <span><i class="dot unreg"></i>미등록</span>
+      <span><i class="dot ai"></i>AI</span>
+    </div>
+    <div class="issues" id="issues"></div>
+  </section>
+  <aside class="detail" id="detail">
+    <div class="empty">
+      <p class="empty-title">노드를 선택하세요</p>
+      <p>규칙 노드(사각형)를 고르면 최종 규칙과 드롭 영역이 열립니다.<br>점선 원은 아직 등록되지 않은 파일입니다. 고르면 AI로 등록할 수 있습니다.<br>파일이나 zip을 이 창에 끌어다 놓으면 라이브러리에 추가됩니다.</p>
+    </div>
+  </aside>
+</main>
+<section id="console-panel" hidden>
+  <div class="con-resize" id="con-resize" title="끌어서 높이 조절"></div>
+  <div class="con-tabs" id="con-tabs">
+    <div class="con-tablist" id="con-tablist"></div>
+    <select id="con-add" title="AI 탭: 연결한 Claude Code·Codex를 이 라이브러리에서 엽니다. 노드는 am 명령으로 바꿉니다">
+      <option value="">+ AI</option>
+      <option value="claude">Claude Code</option>
+      <option value="codex">Codex</option>
+    </select>
+    <span class="con-hint" id="con-hint"></span>
+    <button class="ghost" id="con-hide" title="패널 숨기기 (탭은 그대로 유지)">숨기기</button>
+  </div>
+  <div class="con-body" id="con-body"></div>
+</section>
+<div id="drop-overlay" hidden><div><span id="drop-overlay-text">여기에 놓으면 라이브러리에 추가됩니다</span><small>놓으면 무슨 일이 일어날지 먼저 보여 줍니다 · 이미지 · html/css · pdf · txt/md · 폴더 · AI가 준 assets-import.zip</small></div></div>
+<dialog id="changes-dialog">
+  <div class="dlg-head"><h2>변경 감지</h2><button class="ghost" data-close>닫기</button></div>
+  <p class="muted">조립 결과가 지난번과 달라진 노드입니다. 변경은 이미 적용되어 있고, 여기서는 무엇이 바뀌었는지 확인만 합니다.</p>
+  <div id="changes-list"></div>
+  <div class="dlg-foot"><button class="primary" id="approve-all">모두 확인함</button></div>
+</dialog>
+<dialog id="trash-dialog">
+  <div class="dlg-head"><h2>휴지통</h2><button class="ghost" data-close>닫기</button></div>
+  <p class="muted">삭제한 노드는 여기에서 복구할 수 있습니다. 파일은 history/trash/ 폴더에 있습니다.</p>
+  <div id="trash-list"></div>
+</dialog>
+<dialog id="outcome-dialog" class="side">
+  <div class="dlg-head"><h2>예상 결과</h2><button class="ghost" id="outcome-cancel">취소</button></div>
+  <div id="outcome-body"></div>
+  <div class="dlg-foot"><button class="primary" id="outcome-ok">확인</button></div>
+</dialog>
+<dialog id="tidy-dialog" class="wide tidy">
+  <div class="dlg-head"><h2 id="tidy-title">하위 정리</h2><button class="ghost" id="tidy-close">닫기</button></div>
+  <div id="tidy-body"></div>
+  <div class="dlg-foot"><button class="primary" id="tidy-apply" hidden>반영하기</button></div>
+</dialog>
+<dialog id="settings-dialog" class="wide settings">
+  <div class="dlg-head"><h2>설정</h2><button class="ghost" data-close>닫기</button></div>
+  <div id="settings-body"></div>
+</dialog>
+<div id="job-bar" hidden></div>
+<dialog id="mcp-dialog" class="wide">
+  <div class="dlg-head"><h2>AI 비서 연결 (MCP · RAG)</h2><button class="ghost" data-close>닫기</button></div>
+  <div id="mcp-body"></div>
+</dialog>
+<script src="vendor/cytoscape.min.js"></script>
+<script src="vendor/xterm.js"></script>
+<script src="vendor/xterm-addon-fit.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "assets-manager",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "server": "python core/server.py",
+    "test": "python -m unittest discover -s tests"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

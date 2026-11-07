@@ -1,0 +1,34 @@
+# 드롭 대상과 한도 (레이어 0)
+# 한도값은 추정치입니다. 0단계 드래그 실험에서 실제로 확인하고 고쳐 주세요.
+#   max_files     한 번에 첨부할 수 있는 파일 수 (prompt.md 포함)
+#   max_file_mb   파일 하나의 최대 크기
+#   max_chars     프롬프트 최대 글자 수
+#   include_paths 프롬프트에 절대 경로 목록을 붙일지 (파일을 직접 읽는 에이전트용)
+#   allow_internal 민감(internal) 자료 첨부 허용 여부
+#   kind          agent(내 PC 폴더를 읽고 쓰며 스크립트를 실행) | chat(채팅형, 첨부만 받음)
+version: 2
+targets:
+  codex:
+    label: Codex
+    kind: agent
+    max_files: 20
+    max_file_mb: 50
+    max_chars: 60000
+    include_paths: true
+    allow_internal: true
+  claude_desktop:
+    label: Claude 데스크톱
+    kind: chat
+    max_files: 20
+    max_file_mb: 30
+    max_chars: 60000
+    include_paths: false
+    allow_internal: true
+  chatgpt_web:
+    label: ChatGPT 웹
+    kind: chat
+    max_files: 10
+    max_file_mb: 20
+    max_chars: 30000
+    include_paths: false
+    allow_internal: false

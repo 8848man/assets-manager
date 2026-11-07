@@ -1,0 +1,111 @@
+"""v3.5 로컬 AI 도구 연결 (Q76-B): 찾기·설정·시험·실행·결과 확인. 실제 도구 대신 가짜 명령줄 도구를 쓴다."""
+import os
+import re
+import shutil
+import stat
+import sys
+import tempfile
+import time
+import unittest
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core"))
+from engine import Library  # noqa: E402
+import local_ai  # noqa: E402
+import tidy  # noqa: E402
+
+FAKE = r'''#!{py}
+import os, re, sys
+args = sys.argv[1:]
+if args == ["--version"]:
+    print("9.9.9 (fake)"); sys.exit(0)
+text = " ".join(args)
+if "연결 시험" in text:
+    print("OK"); sys.exit(0)
+m = re.search(r"파일 (\S+) 를 읽고", text)
+prompt = open(m.group(1), encoding="utf-8").read()
+rid = re.search(r"req-[0-9A-Za-z-]+", prompt).group(0)
+if os.environ.get("FAKE_NO_OUTPUT"):
+    print("아무것도 안 씀"); sys.exit(0)
+os.makedirs(f"inbox/{rid}/out", exist_ok=True)
+open(f"inbox/{rid}/out/plan.yaml", "w", encoding="utf-8").write(f"request: {rid}\nsummary: 가짜 정리\nops: []\n")
+print("done", rid)
+'''
+
+
+def write(root, rel, text):
+    p = os.path.join(root, rel)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(text)
+    return p
+
+
+class LocalAiTests(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        write(self.d, "sets/s.md", "---\nid: s\ntype: rule\nkind: set\ntitle: 세트\nrules:\n  tone: 존댓말\n---\n")
+        self.tool = write(self.d, "_bin/fake-claude", FAKE.replace("{py}", sys.executable))
+        os.chmod(self.tool, os.stat(self.tool).st_mode | stat.S_IEXEC)
+        os.environ.pop("FAKE_NO_OUTPUT", None)
+
+    def tearDown(self):
+        os.environ.pop("FAKE_NO_OUTPUT", None)
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def connect(self):
+        local_ai.update_config(self.d, {"tools": {"claude": {"custom_path": self.tool}, "codex": {"custom_path": os.path.join(self.d, "none")}}})
+        return local_ai.status(self.d)
+
+    def wait(self, jid):
+        for _ in range(100):
+            j = local_ai.get_job(self.d, jid)
+            if j["state"] != "running":
+                return j
+            time.sleep(0.1)
+        self.fail("작업이 끝나지 않음")
+
+    def test_detect_status_and_test(self):
+        st = self.connect()
+        self.assertTrue(st["ready"])
+        self.assertEqual(st["default"], "claude")
+        c = next(t for t in st["tools"] if t["name"] == "claude")
+        self.assertEqual(c["version"], "9.9.9 (fake)")
+        self.assertFalse(next(t for t in st["tools"] if t["name"] == "codex")["found"])
+        self.assertTrue(local_ai.test(self.d, "claude")["ok"])
+        st = local_ai.update_config(self.d, {"tools": {"claude": {"enabled": False}}})
+        self.assertFalse(st["ready"])
+
+    def test_not_connected_raises_lookup(self):
+        lib = Library(self.d)
+        b = tidy.build(lib, "s")
+        with self.assertRaises(LookupError):
+            local_ai.run_for(lib, {"kind": "tidy", "request": b["request"]})
+
+    def test_run_tidy_and_preview(self):
+        self.connect()
+        lib = Library(self.d)
+        b = tidy.build(lib, "s")
+        job = local_ai.run_for(lib, {"kind": "tidy", "request": b["request"]})
+        self.assertNotIn('"', job["instruction"])
+        j = self.wait(job["id"])
+        self.assertEqual(j["state"], "done", j)
+        self.assertTrue(j["result_found"])
+        pv = tidy.preview(Library(self.d), b["request"])
+        self.assertEqual(pv["summary"], "가짜 정리")
+        with open(os.path.join(self.d, "inbox", b["request"], "prompt-local.md"), encoding="utf-8") as f:
+            prompt = f.read()
+        self.assertIn(f"inbox/{b['request']}/out/plan.yaml", prompt)  # 에이전트용 지시
+
+    def test_missing_result_is_failure(self):
+        self.connect()
+        os.environ["FAKE_NO_OUTPUT"] = "1"
+        lib = Library(self.d)
+        b = tidy.build(lib, "s")
+        j = self.wait(local_ai.run_for(lib, {"kind": "tidy", "request": b["request"]})["id"])
+        self.assertEqual(j["state"], "failed")
+        self.assertIn("결과 파일이 없습니다", j["error"])
+        self.assertIn("아무것도 안 씀", j["log"])
+
+
+if __name__ == "__main__":
+    unittest.main()
