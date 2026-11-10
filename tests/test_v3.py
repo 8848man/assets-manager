@@ -155,6 +155,31 @@ class V3Test(unittest.TestCase):
         self.assertIn("history/versions/", ignored)
         self.assertFalse(store.backup_sync(self.lib())["git"].get("committed"))  # 변경 없으면 커밋 안 함
 
+    def test_commit_message_summarizes_changes(self):
+        changes = [("M", "sets/naver-blog-post.md", None), ("A", "image/ill.meta.yaml", None),
+                   ("A", "image/ill.png", None), ("M", "layout.json", None), ("M", "history/drops.jsonl", None)]
+        subject, body = store.commit_message(changes)
+        self.assertEqual(subject, "규칙 수정 · 레퍼런스 추가 · 드롭 기록 · 노드 배치 저장: naver-blog-post, ill")
+        self.assertIn("추가 image/ill.png", body)
+        self.assertTrue(body.endswith("출처: 폴더 변경 감지"))
+        subject, body = store.commit_message([("M", "layout.json", None)], "Assets Manager 시작")
+        self.assertEqual(subject, "Assets Manager 시작 — 노드 배치 저장")
+        self.assertTrue(body.endswith("출처: 앱 동작"))
+        many = [("D", f"principles/p{i}.md", None) for i in range(5)] + [("R", "sets/b.md", "sets/a.md")]
+        subject, body = store.commit_message(many)
+        self.assertEqual(subject, "규칙 삭제 · 규칙 이름 변경: p0, p1, p2 외 3개")
+        self.assertIn("이름 변경 sets/a.md → sets/b.md", body)
+
+    @unittest.skipUnless(shutil.which("git"), "git 없음")
+    def test_git_auto_commit_message(self):
+        store.backup_sync(self.lib())  # 첫 기록 (기본값 복사 등)
+        rule(self.root, "sets/a.md", "a", None, "  tone: x\n")
+        store.backup_sync(self.lib())
+        log =subprocess.run(["git", "log", "-1", "--format=%s%n%b"], cwd=self.root, capture_output=True, text=True,
+                             encoding="utf-8").stdout
+        self.assertIn("규칙 추가: a", log.splitlines()[0])
+        self.assertIn("출처: 폴더 변경 감지", log)
+
     def test_fresh_only_after_baseline(self):
         image_ref(self.root, "old")
         store.backup_sync(self.lib())  # 첫 실행: 기존 파일은 기준선

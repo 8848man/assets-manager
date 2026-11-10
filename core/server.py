@@ -36,7 +36,7 @@ import console  # noqa: E402
 import terminal  # noqa: E402
 from engine import library_signature  # noqa: E402
 
-APP_VERSION = "0.14.0"  # UI(app.js)의 APP_VERSION과 같아야 함
+APP_VERSION = "0.14.1"  # UI(app.js)의 APP_VERSION과 같아야 함
 UI_DIR = os.path.join(APP_DIR, "ui")
 LOCK = threading.Lock()
 STATE: dict = {}

@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.14.0 · 기획서 v3.3(+14A~14I) 기준 · 2026-11-10
+앱 버전 0.14.1 · 기획서 v3.3(+14A~14I) 기준 · 2026-11-10
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -77,7 +77,7 @@
 | `core/server.py` | HTTP API, 정적 파일, 포트 인계(`/api/shutdown`), 레이아웃 저장 | `Handler`, `library()`, `node_detail`, `handle_drop`(v3.1 호환), `bind` | 모든 core 모듈 |
 | `core/drops.py` | 예상 결과 창: 놓은 것을 분류해 선택지 생성(stage), 실행(commit), 승격, 되돌리기 | `stage`, `commit`, `promote`, `undo`, `OPT` | `folder_requests`, `store` |
 | `core/folder_requests.py` | AI 요청의 수명: 준비 → 패키지 → 결과 수신 → 미리보기 → 적용. 원본 짝 맞추기 | `new_request`, `prepare`, `package`, `render`, `receive_zip`, `attach`, `auto_assign`, `assign`, `preview`, `apply`, `_set_rule` | `extract`, `store` |
-| `core/store.py` | 드롭 히스토리, 버전 보관, Git, 휴지통, 가져오기, 기본값 업데이트 | `append_history`, `read_history`, `backup_sync`, `fresh_files`, `versions_for`, `restore_version`, `git_commit`, `delete_node`, `restore_trash`, `import_items`, `import_zip`, `defaults_updates`, `upgrade_defaults` | git(선택) |
+| `core/store.py` | 드롭 히스토리, 버전 보관, Git, 휴지통, 가져오기, 기본값 업데이트 | `append_history`, `read_history`, `backup_sync`, `fresh_files`, `versions_for`, `restore_version`, `git_commit`, `commit_message`, `delete_node`, `restore_trash`, `import_items`, `import_zip`, `defaults_updates`, `upgrade_defaults` | git(선택) |
 | `core/authoring.py` | 파일 하나·여럿을 AI가 메타로 등록하게 하는 작성 프롬프트 (미등록·기존 노드 다시 쓰기) | `build`, `render` | `extract` |
 | `core/components.py` | 구성 요소 분리(v3.9, Q81-A): 메타 `components` 정리(`normalize`), 잘라 낸 그림·구도 도식 캐시(`ensure`, `.assets/components/`), AI 요청(좌표 격자 사본 + 프롬프트) → 답 받기 → 미리보기(상자 수정 합치기) → 반영, 사람이 고친 요소 저장 | `normalize`, `ensure`, `crop_image`, `composition_image`, `grid_image`, `build`, `render_request`, `receive`, `preview`, `apply`, `save`, `open_request` | `folder_requests`, `store`, `tidy.parse_plan_text`, Pillow |
 | `core/tidy.py` | 하위 정리: 범위(scope)·결정적 진단(diagnose) → AI 요청 프롬프트 → plan(ops) 메모리 시뮬레이션 → 전·후 그래프·변경 이유·프롬프트 비교 → 적용 | `scope`, `diagnose`, `build`, `receive`, `simulate`, `preview`, `apply` | `folder_requests`, `store` |
@@ -96,7 +96,7 @@
 | `ui/app.js` | 화면 전체 (빌드 단계 없음) | `loadGraph`, `select`, `render*`, `refreshPackage`, `handleDrop`, `openOutcome`, `confirmOutcome`, `copyExport` | Cytoscape·xterm.js 5.5 + addon-fit(번들, `ui/vendor/`), Tauri 전역(`window.__TAURI__`) |
 | `src-tauri/src/main.rs` | 셸, 사이드카 실행(`py` → `python` 순서), 종료 처리 | `spawn_server` | tauri 2, tauri-plugin-drag 2 |
 | `defaults/` | 앱 번들 기본값 (`keys.yaml`, `targets.yaml`, `defaults.md`) — 라이브러리에 없으면 복사 | | |
-| `tests/` | 단위·통합 테스트 94개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310` | |
+| `tests/` | 단위·통합 테스트 96개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310` | |
 
 ## 5. 데이터 모델
 
@@ -301,6 +301,11 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 
 로더 제외 목록: `engine.SKIP_DIRS`(`app`, `history`, `inbox`, 숨김 폴더). Git 제외 목록: `store.GITIGNORE_LINES`(없는 줄만 자동 추가).
 
+라이브러리 자동 커밋 메시지 (0.14.1, `store.commit_message`): `git add -A` 뒤 변경 목록(`_staged`, `status --porcelain=v1 -z`)으로 만든다.
+- 제목: `[앱 동작 문구 — ]분류 동작 · …: 이름1, 이름2, 이름3 외 N개`. 분류는 앞 폴더 기준 `COMMIT_AREAS`(규칙·레퍼런스·산출물·스킬·기본값·드롭 기록·기록·노드 배치, 나머지는 기타), 동작은 추가·수정·삭제·이름 변경. 이름은 노드 id에 가깝게(확장자·`.meta.yaml` 제거, 스킬은 폴더 이름). `layout.json`은 "노드 배치 저장", `history/drops.jsonl`은 "드롭 기록"으로 이름 없이 쓴다.
+- 본문: 파일마다 `동작 경로` 한 줄(최대 50줄) + `출처: 폴더 변경 감지 | 앱 동작`.
+- 앱 동작 문구(`backup_sync(lib, message)`: "Assets Manager 시작", "놓기: …", "콘솔 전: …" 등)는 제목 앞에 붙는다. 0.14.0까지의 커밋은 "자동 기록: 변경 N개 (폴더 변경 감지)"였고, 지난 이력은 고치지 않는다.
+
 ## 8. HTTP API (`core/server.py`, 127.0.0.1:8765)
 
 | 메서드 · 경로 | 용도 |
@@ -397,7 +402,7 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 | 파일 | 다루는 것 |
 |---|---|
 | `test_engine.py` | 기본값 복사, 다중 상속, 순환, 동의어, 지시문, 결정성, 덜어내기 3단계, 민감도, 변경 감지, index |
-| `test_v3.py` | 우선순위·점검, 미등록·작성, 가져오기, 히스토리, 버전·휴지통·Git, 기본값 업데이트, fresh |
+| `test_v3.py` | 우선순위·점검, 미등록·작성, 가져오기, 히스토리, 버전·휴지통·Git, 자동 커밋 메시지(분류·이름·이름 변경·출처), 기본값 업데이트, fresh |
 | `test_requests.py` | 폴더 요청: 준비, 시트·묶음, 결과 미리보기·적용, 덮어쓰기, 잘못된 plan |
 | `test_v33.py` | 검색, 참고 예시·덜어내기, stage 선택지, commit(산출물·원본·변형·골든·승격·되돌리기), 요청 없는 zip·`@target`·짝 맞추기, 내보내기 명령, RAG, MCP(stdio 실제 프로세스), 노드 종류별 자동 연결, 개발 착수 프리셋 조립, `uses` 조립 순서, 하위 정리 왕복(프롬프트 동일·쓰이는 노드 휴지통 거부·값 변경 감지), 승인 게이트·작업 대기 끝 단락 |
 

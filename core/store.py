@@ -183,6 +183,77 @@ def git_status(root: str) -> dict:
             "inside_other": bool(top) and top != os.path.normcase(os.path.abspath(root))}
 
 
+def _staged(root: str) -> list[tuple[str, str, str | None]]:
+    """`git add -A` 뒤의 변경 목록: (상태 글자, 경로, 이름 변경 전 경로)."""
+    parts = _git(root, "status", "--porcelain=v1", "-z").stdout.split("\0")
+    out, i = [], 0
+    while i < len(parts):
+        e = parts[i]
+        i += 1
+        if len(e) < 4:
+            continue
+        code, path, orig = (e[0] if e[0] != " " else e[1]), e[3:], None
+        if code in "RC" and i < len(parts):
+            orig = parts[i]
+            i += 1
+        out.append((code, path, orig))
+    return out
+
+
+# 자동 커밋 메시지의 분류 (앞 폴더 기준, 표시 순서). 고정 문구 분류는 이름을 붙이지 않는다.
+COMMIT_AREAS = [("규칙", ("sets/", "principles/")), ("레퍼런스", ("image/", "web/", "document/", "writing/", "golden/")),
+                ("산출물", ("outputs/",)), ("스킬", ("skills/",)), ("기본값", ("_defaults/",)),
+                ("드롭 기록", ("history/drops.jsonl",)), ("기록", ("history/",)), ("노드 배치", ("layout.json",))]
+COMMIT_FIXED = {"드롭 기록": "드롭 기록", "노드 배치": "노드 배치 저장"}
+COMMIT_ACTION = {"A": "추가", "M": "수정", "D": "삭제", "R": "이름 변경", "C": "복사"}
+
+
+def _commit_area(rel: str) -> tuple[str, str]:
+    """경로 → (분류, 사람이 읽는 이름). 이름은 노드 id에 가깝게 (확장자·.meta 제거, 스킬은 폴더 이름)."""
+    area = next((a for a, pre in COMMIT_AREAS if any(rel == p or rel.startswith(p) for p in pre)), "기타")
+    parts = rel.split("/")
+    if area == "스킬" and len(parts) > 1:
+        return area, parts[1]
+    name = parts[-1]
+    for suf in (".meta.yaml", ".meta.yml"):
+        if name.endswith(suf):
+            return area, name[: -len(suf)]
+    return area, (os.path.splitext(name)[0] if area != "기타" else name)
+
+
+def commit_message(changes: list[tuple[str, str, str | None]], message: str | None = None) -> tuple[str, str]:
+    """변경 목록으로 커밋 제목과 본문을 만든다.
+    제목: `[앱 동작 — ]분류 동작 · …: 이름1, 이름2, 이름3 외 N개`. 본문: 파일마다 한 줄 + 출처."""
+    order = [a for a, _ in COMMIT_AREAS] + ["기타"]
+    groups: dict[tuple[str, str], list[str]] = {}
+    lines = []
+    for code, path, orig in changes:
+        area, name = _commit_area(path)
+        act = COMMIT_ACTION.get(code, "변경")
+        groups.setdefault((area, act), [])
+        if name not in groups[(area, act)]:
+            groups[(area, act)].append(name)
+        lines.append(f"{act} {orig} → {path}" if orig else f"{act} {path}")
+    keys = sorted(groups, key=lambda k: (order.index(k[0]), list(COMMIT_ACTION.values()).index(k[1])
+                                         if k[1] in COMMIT_ACTION.values() else 99))
+    labels, names = [], []
+    for area, act in keys:
+        label = COMMIT_FIXED.get(area) or f"{area} {act}"
+        if label not in labels:
+            labels.append(label)
+        if area not in COMMIT_FIXED:
+            names += [n for n in groups[(area, act)] if n not in names]
+    summary = " · ".join(labels)
+    if names:
+        summary += ": " + ", ".join(names[:3]) + (f" 외 {len(names) - 3}개" if len(names) > 3 else "")
+    subject = f"{message} — {summary}" if message else summary
+    lines.sort()
+    if len(lines) > 50:
+        lines = lines[:50] + [f"… 외 {len(lines) - 50}개"]
+    body = "\n".join(lines) + "\n\n출처: " + ("앱 동작" if message else "폴더 변경 감지")
+    return subject, body
+
+
 def git_commit(root: str, message: str | None = None) -> dict:
     try:
         st = git_status(root)
@@ -200,11 +271,11 @@ def git_commit(root: str, message: str | None = None) -> dict:
             with open(gi, "a", encoding="utf-8") as f:
                 f.write(("\n" if have and have[-1] else "") + "\n".join(missing) + "\n")
         _git(root, "add", "-A")
-        changes = [l for l in _git(root, "status", "--porcelain").stdout.splitlines() if l.strip()]
+        changes = _staged(root)
         if not changes:
             return {"available": True, "repo": True, "committed": False}
-        msg = message or f"자동 기록: 변경 {len(changes)}개 (폴더 변경 감지)"
-        r = _git(root, "commit", "-q", "-m", msg)
+        msg, body = commit_message(changes, message)
+        r = _git(root, "commit", "-q", "-m", msg, "-m", body)
         return {"available": True, "repo": True, "committed": r.returncode == 0, "message": msg,
                 "error": r.stderr.strip() if r.returncode else None}
     except Exception as e:

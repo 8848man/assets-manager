@@ -1,5 +1,5 @@
 /* Assets Manager UI — 그래프, 상세 패널, 드롭 영역, AI 작성 흐름, 가져오기, 기록과 되돌리기 (기획서 v3) */
-const APP_VERSION = "0.14.0"; // server.py의 APP_VERSION과 같아야 함
+const APP_VERSION = "0.14.1"; // server.py의 APP_VERSION과 같아야 함
 const API = location.port === "8765" ? "" : "http://127.0.0.1:8765";
 const TAURI = window.__TAURI__ || null;
 const $ = (s) => document.querySelector(s);
