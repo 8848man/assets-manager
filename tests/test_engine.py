@@ -87,11 +87,11 @@ class EngineTest(unittest.TestCase):
     def test_ref_note_overrides_template_and_paths(self):
         image_ref(self.root, "g")
         rule(self.root, "a.md", "a", None,
-             "  chart_style: ref:g\n  image_style:\n    value: ref:g\n    note: 특별지시 [{n}] {file}\n")
+             "  chart_style: ref:g\n  palette:\n    value: ref:g\n    note: 특별지시 [{n}] {file}\n")
         L = self.lib()
         p = L.package("a", "codex")
-        self.assertIn("특별지시 [2] g.png", p["prompt"])
-        self.assertIn("첨부 [1] g.png의 형태", p["prompt"])
+        self.assertIn("특별지시 [1] g.png", p["prompt"])
+        self.assertIn("첨부 [2] g.png의 형태", p["prompt"])
         self.assertIn(os.path.join(self.root, "image", "g.png"), p["prompt"])  # Codex는 경로 포함
         q = L.package("a", "chatgpt_web")
         self.assertNotIn("파일 경로", q["prompt"])

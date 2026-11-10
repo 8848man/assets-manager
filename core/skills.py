@@ -338,6 +338,10 @@ def compile_set(lib: Library, nid: str) -> dict:
     for e in asm["entries"]:  # P8: 사내 자료는 파일로 내보내지 않고 글로만
         ref = lib._ref_id(e.get("value"))
         if ref and lib.nodes.get(ref, {}).get("sensitivity", "public") != "public":
+            if e.get("image"):  # v3.10: 이미지는 글로 바꾸지 않는다
+                mode[e["key"]] = "drop"
+                warnings.append(f"`{e['key']}`의 이미지 '{lib.nodes[ref]['title']}'은(는) 내부 자료라 스킬에서 뺐습니다")
+                continue
             mode[e["key"]] = "text"
             warnings.append(f"`{e['key']}`의 레퍼런스 '{lib.nodes[ref]['title']}'은(는) 내부 자료라 파일 대신 글로 넣었습니다")
     prompt, attachments = lib.render(asm, mode=mode)

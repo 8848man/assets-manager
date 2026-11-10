@@ -9,6 +9,8 @@
 #   instruction     텍스트 값일 때의 문장 템플릿. {value}
 #   ref_instruction 레퍼런스 값일 때의 지시문 템플릿. {n} {file} {title}
 #   check           출력 전 자가 점검 문장 (프롬프트 끝 체크리스트에 들어감)
+#   image           (v5) true면 이미지 키: 원본(+similar_to로 묶인 원본)만 '## 이미지 생성' 단락에서 ImageGen 참조로 넘긴다.
+#                   ref_instruction·check·spec·구성 요소는 쓰지 않고, 텍스트 값은 '원본과 다르게 할 점'으로만 들어간다.
 #   precedence      이 키가 다른 키보다 우선하는 범위. [{over: 키, scope: 범위}]
 #                   세트에서 precedence: [{first, over, scope}]로 뒤집을 수 있습니다.
 #
@@ -18,7 +20,7 @@
 #
 # 구체적인 캐릭터나 화풍은 여기에 쓰지 마세요. 여기는 모든 세트가 공유합니다.
 # 캐릭터 묘사는 세트의 규칙 값이나 캐릭터 레퍼런스 노드에 둡니다.
-version: 4
+version: 5
 keys:
   language:
     label: 언어
@@ -86,39 +88,35 @@ keys:
   character_style:
     label: 캐릭터
     domain: content
+    image: true
     priority: required
     aliases: [character, 캐릭터, 캐릭터스타일, mascot]
     instruction: "{value}"
-    ref_instruction: "캐릭터는 첨부 [{n}] {file}의 캐릭터를 따르세요(얼굴 표현, 표정 범위, 비례, 개성 표현 방식)."
-    check: "캐릭터의 얼굴 표현과 비례가 캐릭터 규칙을 지키는가"
     precedence:
       - { over: image_style, scope: 캐릭터 }
   composition:
     label: 배치와 구도
     domain: content
+    image: true
     priority: recommended
     aliases: [layout_scene, 구도, 배치, scene]
     instruction: "{value}"
-    ref_instruction: "배치와 구도는 첨부 [{n}] {file}을 참고하세요(요소 배치, 흐름 방향, 여백)."
-    check: "요소 배치와 흐름 방향이 구도 규칙을 따르는가"
   shape_style:
     label: 도형
     domain: content
+    image: true
     priority: recommended
     aliases: [shape, block_style, 도형, 도형스타일]
     instruction: "{value}"
-    ref_instruction: "도형(블록, 상자, 아이콘 등)은 첨부 [{n}] {file}의 모양, 모서리 둥글기, 외곽선, 면 채색을 따르세요."
-    check: "도형의 모양과 외곽선이 도형 규칙을 따르는가"
     precedence:
       - { over: image_style, scope: 도형 }
   image_style:
     label: 화풍
     domain: content
+    image: true
     priority: recommended
     aliases: [illustration_style, 이미지스타일, 삽화, 화풍]
     instruction: "{value}"
-    ref_instruction: "삽화나 이미지 생성 프롬프트가 필요하면 첨부 [{n}] {file}의 화풍(선 굵기, 채색 방식, 질감)을 따르세요."
-    check: "선 굵기와 채색 방식이 화풍 레퍼런스와 같은가"
   palette:
     label: 색상 팔레트
     domain: common

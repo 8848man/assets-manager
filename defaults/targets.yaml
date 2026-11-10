@@ -5,8 +5,9 @@
 #   max_chars     프롬프트 최대 글자 수
 #   include_paths 프롬프트에 절대 경로 목록을 붙일지 (파일을 직접 읽는 에이전트용)
 #   allow_internal 민감(internal) 자료 첨부 허용 여부
+#   image_gen     ImageGen으로 이미지를 직접 만드는지 (v3: true면 원본을 참조 이미지로 바로 넣고, false면 ImageGen 요청서를 쓰게 함)
 #   kind          agent(내 PC 폴더를 읽고 쓰며 스크립트를 실행) | chat(채팅형, 첨부만 받음)
-version: 2
+version: 3
 targets:
   codex:
     label: Codex
@@ -16,6 +17,7 @@ targets:
     max_chars: 60000
     include_paths: true
     allow_internal: true
+    image_gen: false
   claude_desktop:
     label: Claude 데스크톱
     kind: chat
@@ -24,6 +26,7 @@ targets:
     max_chars: 60000
     include_paths: false
     allow_internal: true
+    image_gen: false
   chatgpt_web:
     label: ChatGPT 웹
     kind: chat
@@ -32,3 +35,4 @@ targets:
     max_chars: 30000
     include_paths: false
     allow_internal: false
+    image_gen: true

@@ -75,7 +75,7 @@ class ComponentsTest(unittest.TestCase):
 
     def test_render_attaches_original_and_components(self):
         picture(self.root, "ill")
-        rule(self.root, "sets/a.md", "a", None, "  image_style: ref:ill\n")
+        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill\n")
         p = self.lib().package("a", "claude_desktop", write=True)
         pr = p["prompt"]
         self.assertIn("첨부 [1] ill.png", pr)
@@ -95,7 +95,7 @@ class ComponentsTest(unittest.TestCase):
 
     def test_deterministic(self):
         picture(self.root, "ill")
-        rule(self.root, "sets/a.md", "a", None, "  image_style: ref:ill\n")
+        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill\n")
         p1 = self.lib().package("a", "claude_desktop", write=True)
         with open(p1["files"][4], "rb") as f:
             b1 = f.read()
@@ -106,15 +106,21 @@ class ComponentsTest(unittest.TestCase):
         self.assertEqual(p1["prompt"], p2["prompt"])
         self.assertEqual(b1, b2)
 
-    def test_rule_wins_over_component(self):
+    def test_image_key_ignores_components(self):
+        """v3.10 (Q82-A): 이미지 키는 분리한 요소·요소 설명·점검 없이 원본만 넘긴다."""
         picture(self.root, "ill")
         rule(self.root, "sets/a.md", "a", None, "  image_style: ref:ill\n  character_style: 점 눈, 눈썹으로 표정\n")
-        pr = self.lib().package("a", "claude_desktop", write=False)["prompt"]
-        self.assertIn("캐릭터에 관해서는 **캐릭터** 규칙을 분리한 요소(첨부 [1-a])보다 우선합니다", pr)
+        p = self.lib().package("a", "claude_desktop", write=False)
+        pr = p["prompt"]
+        self.assertIn("- [1] ill.png", pr)
+        self.assertNotIn("1-a", pr)
+        self.assertNotIn("분리한 요소", pr)
+        self.assertNotIn("눈이 점 2개인가", pr)
+        self.assertEqual(len(p["files"]), 2)  # prompt.md + 원본
 
     def test_part_reference(self):
         picture(self.root, "ill")
-        rule(self.root, "sets/a.md", "a", None, "  character_style: ref:ill#character\n")
+        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill#character\n")
         L = self.lib()
         self.assertEqual([i for i in L.issues if i["level"] == "error"], [])
         p = L.package("a", "claude_desktop", write=True)
@@ -126,12 +132,12 @@ class ComponentsTest(unittest.TestCase):
 
     def test_missing_part_is_error(self):
         picture(self.root, "ill")
-        rule(self.root, "sets/a.md", "a", None, "  character_style: ref:ill#nope\n")
+        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill#nope\n")
         self.assertTrue(any("구성 요소 없음" in i["message"] for i in self.lib().issues))
 
     def test_trim_components_to_text_first(self):
         picture(self.root, "ill")
-        rule(self.root, "sets/a.md", "a", None, "  image_style: ref:ill\n")
+        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill\n")
         L = self.lib()
         L.targets["tiny"] = {"label": "작은", "kind": "chat", "max_files": 3}
         p = L.package("a", "tiny", trim=True, write=False)
@@ -143,7 +149,7 @@ class ComponentsTest(unittest.TestCase):
     def test_no_components_prompt_unchanged(self):
         os.makedirs(os.path.join(self.root, "image"))
         picture(self.root, "ill", "")
-        rule(self.root, "sets/a.md", "a", None, "  image_style: ref:ill\n")
+        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill\n")
         pr = self.lib().package("a", "claude_desktop", write=False)["prompt"]
         self.assertNotIn("1-a", pr)
         self.assertNotIn("요소", pr)
@@ -213,7 +219,7 @@ class ComponentsTest(unittest.TestCase):
     def test_skill_compile_copies_components(self):
         import skills
         picture(self.root, "ill")
-        rule(self.root, "sets/a.md", "a", None, "  image_style: ref:ill\n")
+        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill\n")
         out = skills.compile_set(self.lib(), "a")
         self.assertIn("references/ill.character.png", out["files"])
         self.assertIn("references/ill.composition.png", out["files"])

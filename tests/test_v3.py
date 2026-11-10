@@ -32,26 +32,26 @@ class V3Test(unittest.TestCase):
     def test_precedence_default_and_checks(self):
         image_ref(self.root, "ill")
         write(self.root, "image/ill.meta.yaml", "id: ill\ntype: image\ntitle: 삽화\nfile: ill.png\ncheck: [외곽선이 굵은가]\n")
-        rule(self.root, "a.md", "a", None, "  image_style: ref:ill\n  character_style: 점 눈, 표정 있음\n")
+        rule(self.root, "a.md", "a", None, "  chart_style: ref:ill\n  palette: 파스텔 5색\n")
         p = self.lib().package("a", "claude_desktop", write=False)["prompt"]
-        self.assertIn("캐릭터에 관해서는 **캐릭터**을(를) **화풍**(첨부 [1])보다 우선합니다.", p)
+        self.assertIn("색에 관해서는 **색상 팔레트**을(를) **차트·도식 스타일**(첨부 [1])보다 우선합니다.", p)
         self.assertIn("## 출력 전 자가 점검", p)
         self.assertIn("- [ ] 외곽선이 굵은가", p)  # 레퍼런스 고유 점검
-        self.assertIn("- [ ] 캐릭터의 얼굴 표현과 비례가 캐릭터 규칙을 지키는가", p)  # 키 점검
+        self.assertIn("- [ ] 사용한 색이 팔레트 안에 있는가", p)  # 키 점검
         self.assertLess(p.index("## 우선순위"), p.index("## 첨부 레퍼런스"))
         self.assertLess(p.index("## 첨부 레퍼런스"), p.index("## 출력 전 자가 점검"))
 
     def test_precedence_override_by_set_and_ref_order(self):
         image_ref(self.root, "ill")
         image_ref(self.root, "chr", color="blue")
-        rule(self.root, "a.md", "a", None, "  image_style: ref:ill\n  character_style: ref:chr\n",
-             "precedence:\n  - { first: image_style, over: character_style, scope: 캐릭터 }\n")
+        rule(self.root, "a.md", "a", None, "  chart_style: ref:ill\n  palette: ref:chr\n",
+             "precedence:\n  - { first: chart_style, over: palette, scope: 색 }\n")
         L = self.lib()
         asm = L.assemble("a")
-        self.assertEqual(asm["precedence"][0]["first"], "image_style")
+        self.assertEqual(asm["precedence"][0]["first"], "chart_style")
         self.assertEqual(asm["precedence"][0]["source"], "a")
         p = L.package("a", "claude_desktop", write=False)["prompt"]
-        self.assertIn("**화풍**(첨부 [1])을(를) **캐릭터**(첨부 [2])보다", p)
+        self.assertIn("**차트·도식 스타일**(첨부 [1])을(를) **색상 팔레트**(첨부 [2])보다", p)
 
     def test_character_ref_attached_first_by_default(self):
         image_ref(self.root, "ill")

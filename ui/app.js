@@ -1,5 +1,5 @@
 /* Assets Manager UI — 그래프, 상세 패널, 드롭 영역, AI 작성 흐름, 가져오기, 기록과 되돌리기 (기획서 v3) */
-const APP_VERSION = "0.13.0"; // server.py의 APP_VERSION과 같아야 함
+const APP_VERSION = "0.14.0"; // server.py의 APP_VERSION과 같아야 함
 const API = location.port === "8765" ? "" : "http://127.0.0.1:8765";
 const TAURI = window.__TAURI__ || null;
 const $ = (s) => document.querySelector(s);
@@ -295,6 +295,7 @@ function renderRef(n) {
     `<h3>설명</h3><div>${esc(n.summary) || '<span class="muted">없음</span>'}</div>` +
     (n.kind === "output" ? "" : compsHtml(n)) +
     `<h3>텍스트 요약 (spec)</h3><div class="muted" style="white-space:pre-wrap">${esc(n.spec) || "없음 — 자동 덜어내기에서 텍스트로 대체할 수 없습니다."}</div>` +
+    (n.type === "image" ? `<div class="muted">v3.10: 이미지 키(캐릭터·구도·도형·화풍)로 쓰일 때는 이 글을 넘기지 않고 원본(+비슷한 원본)만 ImageGen 참조로 넘깁니다.</div>` : "") +
     (n.check?.length ? `<h3>자가 점검</h3><ul class="checks">${n.check.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : "") +
     `<h3>사용하는 규칙 노드</h3><div>${(n.used_by || []).map((u) => `<button class="ghost" data-go="${esc(u)}">${esc(u)}</button>`).join(" ") || '<span class="muted">없음</span>'}</div>` +
     `<h3>태그</h3><div>${(n.tags || []).map((t) => `<span class="chip">${esc(t)}</span>`).join("") || '<span class="muted">없음</span>'}</div>` +
@@ -1817,7 +1818,7 @@ function compsHtml(n) {
           <button class="ghost small" data-comp-del="${esc(c.name)}">빼기</button></div>
       </div>
     </div>`).join("");
-  return `<h3>구성 요소 ${cs.length ? cs.length + "개" : ""} <span class="muted" style="font-weight:400">— 드롭할 때 원본과 함께 첨부해 캐릭터·도형·구도가 뭉개지지 않게 합니다</span></h3>
+  return `<h3>구성 요소 ${cs.length ? cs.length + "개" : ""} <span class="muted" style="font-weight:400">— 이미지가 아닌 키(차트 등)에서 원본과 함께 첨부합니다. 이미지 키(캐릭터·구도·도형·화풍)에서는 원본만 넘깁니다</span></h3>
     ${cs.length ? `<div class="comp-grid">${cards}</div>` : `<div class="muted">아직 나누지 않았습니다. AI가 캐릭터·도형·구도의 위치와 설명을 정하면, 앱이 잘라 내고 구도 도식을 그립니다.</div>`}
     <div class="row"><button class="${cs.length ? "ghost" : "primary"} small" id="comp-split">AI로 ${cs.length ? "다시 " : ""}나누기</button>
     ${cs.length ? `<button class="ghost small" id="comp-edit">상자 고치기</button>` : ""}</div>`;
@@ -1986,7 +1987,7 @@ function showCompPreview(rid, pv) {
     if (!state.comp.checked.length) return toast("반영할 요소를 하나 이상 고르세요");
     try { await post(`/api/components/${rid}/apply`, { selected: state.comp.checked }); } catch (e) { return toast("반영 실패: " + e.message); }
     $("#comp-dialog").close(); state.comp = null;
-    toast("구성 요소를 반영했습니다. 이 레퍼런스를 쓰는 세트의 드롭에 함께 첨부됩니다");
+    toast("구성 요소를 반영했습니다. 이미지가 아닌 키의 드롭에 함께 첨부됩니다(이미지 키는 원본만)");
     await loadGraph(); select(pv.node);
   };
   if (!$("#comp-dialog").open) $("#comp-dialog").showModal();

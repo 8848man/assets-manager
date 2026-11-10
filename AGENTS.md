@@ -10,7 +10,7 @@
 ## 빠른 지도
 | 하려는 일 | 파일 |
 |---|---|
-| 조립·프롬프트·덜어내기·참고 예시 | `core/engine.py` (`assemble`, `render`, `package`, `add_examples`) |
+| 조립·프롬프트·덜어내기·참고 예시 | `core/engine.py` (`assemble`, `render`, `package`, `add_examples`; 이미지 생성 단락 `image_lines`) |
 | 놓기(드롭) 동작, 예상 결과 선택지 | `core/drops.py` |
 | AI 요청과 결과(plan.yaml) 적용 | `core/folder_requests.py` |
 | 하위 정리 (진단·정리 요청·전후 비교) | `core/tidy.py` |
@@ -30,7 +30,7 @@
 ## 명령
 ```
 # 라이브러리 루트(app의 상위)에서
-python -m unittest discover -s app/tests     # 테스트 (86개, 모두 통과해야 함)
+python -m unittest discover -s app/tests     # 테스트 (94개, 모두 통과해야 함)
 python app/core/server.py                    # 서버 → http://127.0.0.1:8765
 python app/core/extract.py <파일>             # 결정적 값 추출
 python app/core/rag.py                       # RAG JSONL 내보내기

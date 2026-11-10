@@ -50,6 +50,13 @@ PART_DEFAULTS = {
 }
 
 
+# v3.10 (Q82-A): 이미지 키는 원본(+비슷한 원본)만 ImageGen 참조로 넘기고 스타일을 글로 쓰지 않는다.
+# keys.yaml에 image: true 표시가 없으면(기본값 v4 이하) 이 목록을 쓴다
+IMAGE_KEYS_DEFAULT = ("character_style", "composition", "shape_style", "image_style")
+IMAGE_GEN_DEFAULT = ("chatgpt_web",)  # targets.yaml에 image_gen이 없을 때(기본값 v2) ImageGen이 있는 대상
+IMAGE_CHECK = "이미지는 첨부 원본을 참조 이미지로 썼고(또는 ImageGen 요청서로 남겼고), 스타일을 글로 바꿔 쓰지 않았는가"
+
+
 def library_signature(root: str) -> str:
     """로더가 읽는 파일들의 (경로, 크기, 수정 시각) 요약. 바뀌면 그래프를 다시 읽는다 (v3.8 실시간 반영·캐시).
     결정적이다: 정렬된 순회, 시각은 파일 메타데이터만 쓴다."""
@@ -417,6 +424,37 @@ class Library:
                 out.append(n["id"])
         return out
 
+    @property
+    def image_keys(self) -> set:
+        """v3.10: 이미지 키 (keys.yaml의 image: true, 없으면 IMAGE_KEYS_DEFAULT)."""
+        flagged = {k for k, sp in self.keys.items() if isinstance(sp, dict) and sp.get("image")}
+        return flagged or set(IMAGE_KEYS_DEFAULT)
+
+    def image_gen(self, target: str) -> bool:
+        """v3.10: 대상이 ImageGen으로 이미지를 직접 만드는지 (targets.yaml의 image_gen)."""
+        t = self.targets.get(target) or {}
+        return bool(t["image_gen"]) if "image_gen" in t else target in IMAGE_GEN_DEFAULT
+
+    def similar_images(self, rid: str) -> list[str]:
+        """v3.10: similar_to로 묶인(어느 쪽에서 걸었든) 원본 있는 이미지 레퍼런스, id 순."""
+        found = set()
+        for r in (self.nodes.get(rid) or {}).get("relations") or []:
+            if isinstance(r, dict) and r.get("type") == "similar_to" and r.get("target"):
+                found.add(str(r["target"]))
+        for oid in sorted(self.nodes):
+            o = self.nodes[oid]
+            if oid == rid or o.get("type") != "image":
+                continue
+            for r in o.get("relations") or []:
+                if isinstance(r, dict) and r.get("type") == "similar_to" and str(r.get("target")) == rid:
+                    found.add(oid)
+        out = []
+        for oid in sorted(found):
+            o = self.nodes.get(oid)
+            if oid != rid and o and o.get("type") == "image" and o.get("kind") == "reference" and o.get("exists") and o.get("size"):
+                out.append(oid)
+        return out
+
     def key_spec(self, key: str) -> dict:
         return self.keys.get(key) or {"label": key, "priority": "optional", "domain": "custom"}
 
@@ -474,10 +512,22 @@ class Library:
                         e["status"] = "text_only" if rn["spec"] else "missing"
                     elif rn["size"] == 0:
                         e["status"] = "empty" if not rn["spec"] else "text_only"
-                    self._attach_components(e, rn, self._ref_part(f["value"]))
+                    if key in self.image_keys:  # v3.10: 원본만(구성 요소·spec 없이) + 비슷한 원본
+                        e["similar"] = [{"id": s, "title": self.nodes[s]["title"],
+                                         "file": os.path.basename(self.nodes[s]["file"]),
+                                         "abs": self.abspath(self.nodes[s]["file"]), "size": self.nodes[s]["size"],
+                                         "sensitivity": self.nodes[s]["sensitivity"]} for s in self.similar_images(ref)]
+                        if any(x["sensitivity"] == "internal" for x in e["similar"]):
+                            e["sensitivity"] = "internal"
+                    else:
+                        self._attach_components(e, rn, self._ref_part(f["value"]))
+            if key in self.image_keys:
+                e["image"] = True
             own = e.pop("_own_check", None)
             e["check"] = ([spec["check"]] if spec.get("check") else []) + (
                 own if own is not None else (list(self.nodes[ref]["check"]) if ref and ref in self.nodes else []))
+            if e.get("image"):  # v3.10: 이미지 점검 문장은 프롬프트에 넣지 않는다 (골든 샘플 비교용으로만)
+                e["check"] = []
             entries.append(e)
 
         # 우선순위 (Q46~Q47): 키 어휘 기본값 → 상속 순서대로 세트가 덮어씀
@@ -542,9 +592,10 @@ class Library:
 
     # ------------------------------------------------------------------ 렌더
     def render(self, asm: dict, mode: dict | None = None, paths: bool = False,
-               closing: bool = True) -> tuple[str, list[dict]]:
+               closing: bool = True, image_gen: bool = False) -> tuple[str, list[dict]]:
         """조립 결과를 프롬프트로 바꾼다.
-        mode[key] = 'attach' | 'text' | 'sheet' | 'drop' (기본 attach)
+        mode[key] = 'attach' | 'text' | 'sheet' | 'drop' (기본 attach). 이미지 키는 attach | drop만 ('text'도 제외)
+        image_gen: 대상이 ImageGen으로 직접 그리면 True, 아니면 '## 이미지 생성'이 요청서판 (v3.10)
         순서: 규칙 → 우선순위 → 첨부 목록 → 출력 전 자가 점검 → (경로)
         반환: (프롬프트, 첨부 목록[{n, key, abs, file, slots?}])
         """
@@ -564,6 +615,7 @@ class Library:
         comp_checks: list[str] = []
         comp_prec: list[tuple[str, str, str]] = []  # (규칙 키, 요소 라벨, 요소 위치)
         n = 1  # 첨부 레퍼런스 번호 (prompt.md 자신은 세지 않음)
+        image_entries: list[dict] = []  # v3.10 이미지 키: 규칙 단락이 아니라 '## 이미지 생성'으로
 
         def emit_components(e: dict, pnum, force_text: bool) -> None:
             """v3.9 (Q81-A): 레퍼런스에서 분리한 요소를 그 항목 바로 아래에. 원본이 첨부면 [2-a], 아니면 새 번호."""
@@ -610,6 +662,9 @@ class Library:
             if m == "drop":
                 continue
             spec = self.key_spec(e["key"])
+            if e.get("image"):
+                image_entries.append(e)
+                continue
             if e["kind"] == "text":
                 tmpl = spec.get("instruction") or "{value}"
                 lines.append(f"- **{e['label']}**: " + tmpl.format(value=e["value"]))
@@ -642,6 +697,27 @@ class Library:
                          + (f" (도식 번호: {e['legend']})" if e.get("legend") else ""))
             emit_components(e, num, False)
 
+        img_att: list[tuple] = []   # (번호, 역할, 파일 이름)
+        img_rules: list[tuple] = []  # (라벨, 사용자가 쓴 값) — 원본과 다르게 할 점
+        seen_img: set = set()
+        for e in image_entries:
+            if e["kind"] == "text":
+                img_rules.append((e["label"], " ".join(str(e["value"]).split())))
+                continue
+            if mode.get(e["key"], "attach") != "attach" or e["status"] != "ok":
+                continue  # 원본이 없으면 글로 대신하지 않고 뺀다 (package가 경고)
+            items = [(e["ref"], e["ref_abs"], os.path.basename(e["ref_file"]), e["ref_title"], e["label"], e["key"])]
+            if mode.get(e["key"] + "~similar", "attach") == "attach":
+                items += [(x["id"], x["abs"], x["file"], x["title"], f"{e['label']} · 비슷한 원본", e["key"] + "~similar")
+                          for x in e.get("similar") or []]
+            for rid, ab, fn, title, role, akey in items:
+                if rid in seen_img:
+                    continue
+                seen_img.add(rid)
+                attachments.append({"n": n, "key": akey, "abs": ab, "file": fn, "title": title, "image": True, "ref": rid})
+                img_att.append((n, role, fn))
+                n += 1
+
         keys_in = {e["key"] for e in included}
         prec = [p for p in asm.get("precedence", []) if p["first"] in keys_in and p["over"] in keys_in]
         has_examples = any(k.startswith("_example_") for k in keys_in)
@@ -669,6 +745,8 @@ class Library:
             lines += ["", "## 첨부 레퍼런스"]
             for a in attachments:
                 lines.append(f"- [{a['n']}] {a['file']} — {a['title']}")
+        if img_att or img_rules:
+            lines += [""] + image_lines(img_att, img_rules, image_gen)
         checks: list[str] = []
         for e in included:
             for c in e.get("check") or []:
@@ -692,6 +770,8 @@ class Library:
                     where_s = f"첨부 [{sn}] {k['name']}.SKILL.md"
                 lines.append(f"- **{k['title']}** — {k['description'] or '(설명 없음)'} · {where_s}")
             checks.append("해당되는 스킬이 있었다면 그 스킬의 지침을 따랐는가")
+        if img_att or img_rules:
+            checks.append(IMAGE_CHECK)
         if gate:
             checks.append(GATE_CHECK)
         if checks:
@@ -749,6 +829,7 @@ class Library:
         if gate is not None:  # 드롭 영역의 '승인 게이트' 토글이 세트 기본값을 이번만 덮어씀
             asm["gate"] = bool(gate)
         tgt = dict(self.targets.get(target) or {})
+        ig = self.image_gen(target)
         self.add_examples(asm, task or "", agent=tgt.get("kind") == "agent")
         if not tgt:
             raise KeyError(f"알 수 없는 대상: {target}")
@@ -764,6 +845,9 @@ class Library:
                 warnings.append(f"{e['label']}: 레퍼런스 '{e.get('ref_title', e['ref'])}'가 비어 있고 spec도 없어 빠졌습니다.")
             elif e["status"] == "missing":
                 warnings.append(f"{e['label']}: 레퍼런스 ref:{e['ref']}를 찾을 수 없어 빠졌습니다.")
+            elif e.get("image") and e["status"] == "text_only":
+                warnings.append(f"{e['label']}: 원본 없음 — '{e.get('ref_title', e['ref'])}'는 이미지 생성에서 빠졌습니다"
+                                " (원본 파일을 노드에 끌어다 놓으면 채워집니다).")
 
         # 민감도 (Q27): 조립 결과에서 계산
         internal = [e for e in asm["entries"] if e["sensitivity"] == "internal"]
@@ -772,7 +856,7 @@ class Library:
             if strip_sensitive:
                 for e in internal:
                     if e["kind"] == "ref":
-                        if e.get("spec"):
+                        if e.get("spec") and not e.get("image"):
                             mode[e["key"]] = "text"
                             log.append(f"민감 자료 '{e['ref_title']}' 첨부를 텍스트로 대체")
                         else:
@@ -782,7 +866,7 @@ class Library:
                 warnings.append(f"{tgt.get('label', target)}에는 민감 자료가 허용되지 않습니다: " + ", ".join(sensitive_nodes))
 
         def evaluate():
-            prompt, att = self.render(asm, mode, paths=tgt.get("include_paths", False))
+            prompt, att = self.render(asm, mode, paths=tgt.get("include_paths", False), image_gen=ig)
             files = 1 + len(att)  # prompt.md 포함
             v = []
             if files > tgt.get("max_files", 10 ** 9):
@@ -808,8 +892,13 @@ class Library:
                     mode[vv["key"]] = "text" if c["spec"] else "drop"
                     log.append(f"{c['label']} 요소: 크기 초과 첨부를 {'텍스트로 대체' if c['spec'] else '제외'}")
                     continue
+                if vv["key"].endswith("~similar"):  # v3.10 비슷한 원본
+                    mode[vv["key"]] = "drop"; log.append("크기 초과: 비슷한 원본 이미지 제외")
+                    continue
                 e = next(x for x in refs if x["key"] == vv["key"])
-                if e.get("spec"):
+                if e.get("image"):  # v3.10: 이미지는 글로 바꾸지 않는다
+                    mode[e["key"]] = "drop"; log.append(f"{e['label']}: 크기 초과 원본 이미지 제외")
+                elif e.get("spec"):
                     mode[e["key"]] = "text"; log.append(f"{e['label']}: 크기 초과 첨부를 텍스트로 대체")
                 else:
                     mode[e["key"]] = "drop"; log.append(f"{e['label']}: 크기 초과, spec이 없어 제외")
@@ -827,15 +916,25 @@ class Library:
             for e in by_prio(attached()):
                 if not any(v["kind"] == "files" for v in violations):
                     break
+                if e.get("image"):  # v3.10: 이미지 원본은 글로 바꾸지 않는다
+                    continue
                 if e.get("spec"):
                     mode[e["key"]] = "text"
                     log.append(f"1단계: {e['label']} 첨부 → 텍스트(spec)로 대체")
                     prompt, att, violations = evaluate()
                 else:
                     log.append(f"1단계: {e['label']}는 spec이 없어 텍스트 대체 불가")
-            # 2) 컨택트 시트
+            # 1-1) v3.10: 이미지 키의 비슷한 원본부터 뺀다 (선택 → 권장 → 필수)
+            for e in by_prio([x for x in attached() if x.get("image") and x.get("similar")]):
+                if not any(v["kind"] == "files" for v in violations):
+                    break
+                mode[e["key"] + "~similar"] = "drop"
+                log.append(f"1-1단계: {e['label']}의 비슷한 원본 {len(e['similar'])}장 제외")
+                prompt, att, violations = evaluate()
+            # 2) 컨택트 시트 (이미지 키는 ImageGen 참조라 합치지 않는다)
             if any(v["kind"] == "files" for v in violations):
-                imgs = [e for e in attached() if os.path.splitext(e["ref_file"])[1].lower() in IMAGE_EXT]
+                imgs = [e for e in attached() if not e.get("image")
+                        and os.path.splitext(e["ref_file"])[1].lower() in IMAGE_EXT]
                 if len(imgs) >= 2:
                     for e in imgs:
                         mode[e["key"]] = "sheet"
@@ -880,14 +979,14 @@ class Library:
             else:
                 files.append(a["abs"])
         # 클립보드용: 항상 경로를 붙인 판 (Codex 등)
-        clip_prompt, _ = self.render(asm, mode, paths=True)
+        clip_prompt, _ = self.render(asm, mode, paths=True, image_gen=ig)
         if any(a["key"] == "_sheet" for a in att):
             clip_prompt = clip_prompt.replace("(contact-sheet.png는 함께 드롭된 파일)",
                                               os.path.join(out_dir, "contact-sheet.png"))
         return {
             "id": nid, "target": target, "target_label": tgt.get("label", target), "limits": tgt,
             "prompt": prompt, "clipboard": clip_prompt, "files": files, "chain": asm["chain"], "task": asm.get("task", ""),
-            "gate": asm.get("gate", True), "set_gate": set_gate,
+            "gate": asm.get("gate", True), "set_gate": set_gate, "image_gen": ig,
             "entries": [dict(e, mode=mode.get(e["key"], "attach"),
                              **({"components": [dict(c, mode=mode.get(f"{e['key']}#{c['name']}", "attach"))
                                                 for c in e["components"]]} if e.get("components") else {}))
@@ -1037,6 +1136,42 @@ GATE_STEPS = [
     "승인 전에는 결과물(본문, 이미지, 코드, 파일)을 만들거나 기존 파일을 고치지 마세요. 첨부 레퍼런스를 열어 보고 읽는 것은 지금 해도 됩니다.",
 ]
 GATE_CHECK = "계획에 적지 않은 규칙까지 위 규칙과 첨부 레퍼런스를 모두 지켰는가"
+
+
+def image_lines(att: list[tuple], rules: list[tuple], image_gen: bool) -> list[str]:
+    """v3.10 (Q82-A) '## 이미지 생성' 단락. att = [(번호, 역할, 파일)], rules = [(라벨, 사용자 규칙 값)].
+    스타일은 첨부 원본이 맡고, 글은 장면과 사용자가 쓴 '원본과 다르게 할 점'뿐이다."""
+    if image_gen:
+        out = ["## 이미지 생성 (ImageGen)", "이미지(삽화)가 필요하면 ImageGen으로 만드세요."]
+        if att:
+            out.append("- 아래 첨부를 **참조 이미지로 직접 넣으세요.** 첨부를 글로 묘사해서 새로 그리지 마세요. "
+                       "스타일(선, 색, 질감, 캐릭터, 도형)은 첨부 원본을 그대로 따릅니다.")
+            out += [f"  - [{num}] {fn} — {role}" for num, role, fn in att]
+        else:
+            out.append("- 참조할 원본 이미지가 없습니다.")
+        out.append("- 이미지 프롬프트의 글은 장면 내용(무엇이, 어디서, 무엇을 하는가)"
+                   + ("과 아래 '원본과 다르게 할 점'만 쓰세요." if rules else "만 쓰세요.")
+                   + " 스타일 설명을 덧붙이지 마세요.")
+        if rules:
+            out.append("- 원본과 다르게 할 점 (사용자 규칙 — 이것만 원본보다 우선):")
+            out += [f"  - {label}: {value}" for label, value in rules]
+        return out
+    refs = ", ".join(f"[{num}] {fn} ({role})" for num, role, fn in att)
+    out = ["## 이미지 생성 (ImageGen 요청서)",
+           "이미지(삽화)는 직접 그리지 마세요. SVG·코드·다른 생성 도구로 흉내 내지도 마세요. "
+           "이미지가 들어갈 자리마다 아래 형식의 ImageGen 요청서를 결과물 끝에 쓰세요. "
+           "사용자가 요청서와 첨부 원본을 ChatGPT ImageGen에 넣어 만듭니다.",
+           "", "```markdown", "### 이미지 1: <들어갈 자리>"]
+    if att:
+        out.append(f"- 참조 이미지로 첨부: {refs}")
+    out.append("- 장면: <무엇이, 어디서, 무엇을 하는가 — 1~3문장>")
+    if rules:
+        out.append("- 원본과 다르게 할 점: " + " / ".join(f"{label}: {value}" for label, value in rules))
+    out.append("- 지시: 첨부한 이미지를 참조 이미지로 그대로 사용하고, 스타일은 첨부를 따르세요. 장면만 새로 그리세요."
+               if att else "- 지시: 장면만 그리세요.")
+    out += ["```", "",
+            "'<들어갈 자리>'와 '장면'만 채우고 나머지 줄은 그대로 옮기세요. 장면에 스타일 설명(선, 색, 질감, 얼굴 등)을 넣지 마세요."]
+    return out
 
 
 def process_lines(has_task: bool) -> list[str]:
