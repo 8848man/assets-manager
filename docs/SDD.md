@@ -112,7 +112,7 @@
 | `skill` | `skill` | `skills/<이름>/SKILL.md` (폴더째 보관, v3.7) | `name`, `description`, `files`, `body`, `origin`(`.assets-manager.yaml`: 가져온 곳·원래 스킬 끔 여부). 규칙 노드가 `uses`로 붙인다. id = 폴더 이름(겹치면 `-skill`) |
 | `installed_skill` | `library` / `personal` / `synced` | 설치된 `<스킬>/SKILL.md` (라이브러리 안·`~`의 `.claude/skills`, `.agents/skills`) | 그래프 전용, 읽기 전용 (`skill:<범위>:<이름>`). `managed`(이 앱이 내보냄)·`stale`·`edited`·`tool` |
 
-`exists: false`인 레퍼런스·산출물 = **원본 없음**(경고). 조립 때 spec이 있으면 글로 대체(`status: text_only`).
+`exists: false`인 레퍼런스·산출물 = **원본 없음**(경고). 조립 때 spec이 있으면 글로 대체(`status: text_only`). 단 이미지 키(v3.10)는 글로 대체하지 않고 빼며 경고한다.
 
 ### 5.2 규칙 노드 프런트매터
 
