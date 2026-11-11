@@ -36,6 +36,30 @@ def _split(text: str, size: int = CHUNK_CHARS) -> list[str]:
     return out
 
 
+def node_parts(lib: Library, n: dict) -> list[tuple[str, str]]:
+    """노드 하나를 (부분, 글) 조각으로 펼친다. RAG 내보내기와 임베딩 검색(embed.py)이 같이 쓴다."""
+    parts: list[tuple[str, str]] = []
+    if n["type"] == "rule":
+        parts.append(("summary", f"{n['title']} ({n['kind']}). 상속: {', '.join(n['inherits']) or '-'}. {n.get('body', '')}".strip()))
+        if n["id"] not in lib.cyclic:
+            for e in lib.assemble(n["id"])["entries"]:
+                v = e["value"] if isinstance(e["value"], str) else json.dumps(e["value"], ensure_ascii=False)
+                parts.append((f"rule.{e['key']}", f"{e['label']}: {v} (출처: {e['source']})"))
+    else:
+        head = " ".join(x for x in [n["title"], n.get("summary", ""), ("작업: " + n["task"]) if n.get("task") else "",
+                                    ("관련어: " + ", ".join(n["keywords"])) if n.get("keywords") else ""] if x)
+        parts.append(("summary", head))
+        if n.get("spec"):
+            parts.append(("spec", n["spec"]))
+        if n.get("check"):
+            parts.append(("check", "\n".join("- " + c for c in n["check"])))
+        if n.get("exists") and n.get("file") and os.path.splitext(n["file"])[1].lower() in TEXT_EXT:
+            with open(lib.abspath(n["file"]), encoding="utf-8", errors="replace") as f:
+                for i, c in enumerate(_split(f.read())):
+                    parts.append((f"body.{i}", c))
+    return [(part, text) for part, text in parts if text.strip()]
+
+
 def chunks(lib: Library, include_internal: bool = False):
     for n in sorted(lib.nodes.values(), key=lambda x: x["id"]):
         if n["kind"] == "unregistered":
@@ -45,28 +69,7 @@ def chunks(lib: Library, include_internal: bool = False):
         meta = {"node": n["id"], "title": n["title"], "type": n["type"], "kind": n["kind"],
                 "tags": n.get("tags") or [], "sensitivity": n.get("sensitivity", "public"),
                 "path": n.get("path"), "file": n.get("file"), "set": n.get("set")}
-        parts: list[tuple[str, str]] = []
-        if n["type"] == "rule":
-            parts.append(("summary", f"{n['title']} ({n['kind']}). 상속: {', '.join(n['inherits']) or '-'}. {n.get('body', '')}".strip()))
-            if n["id"] not in lib.cyclic:
-                for e in lib.assemble(n["id"])["entries"]:
-                    v = e["value"] if isinstance(e["value"], str) else json.dumps(e["value"], ensure_ascii=False)
-                    parts.append((f"rule.{e['key']}", f"{e['label']}: {v} (출처: {e['source']})"))
-        else:
-            head = " ".join(x for x in [n["title"], n.get("summary", ""), ("작업: " + n["task"]) if n.get("task") else "",
-                                        ("관련어: " + ", ".join(n["keywords"])) if n.get("keywords") else ""] if x)
-            parts.append(("summary", head))
-            if n.get("spec"):
-                parts.append(("spec", n["spec"]))
-            if n.get("check"):
-                parts.append(("check", "\n".join("- " + c for c in n["check"])))
-            if n.get("exists") and os.path.splitext(n["file"])[1].lower() in TEXT_EXT:
-                with open(lib.abspath(n["file"]), encoding="utf-8", errors="replace") as f:
-                    for i, c in enumerate(_split(f.read())):
-                        parts.append((f"body.{i}", c))
-        for part, text in parts:
-            if not text.strip():
-                continue
+        for part, text in node_parts(lib, n):
             yield {"id": f"{n['id']}#{part}", "text": text,
                    "metadata": {**meta, "part": part, "sha": hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]}}
 

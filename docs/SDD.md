@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.14.1 · 기획서 v3.3(+14A~14I) 기준 · 2026-11-10
+앱 버전 0.15.0 · 기획서 v3.3(+14A~14J) 기준 · 2026-11-11
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -10,7 +10,7 @@
 
 내 작업 표준(규칙·레퍼런스·산출물)을 **상속 그래프**로 관리하고, 노드를 외부 AI 앱(Codex, Claude 데스크톱, ChatGPT 웹)에 끌어다 놓으면 **결정적으로 조립된 프롬프트와 첨부 파일**이 넘어가는 로컬 데스크톱 앱. 확인된 산출물은 다시 쌓여 다음 작업의 참고 예시가 되고, MCP로 개인 비서 AI가 직접 검색·조립한다.
 
-범위 밖: 앱 안의 LLM 호출(Q36), 협업·클라우드 동기화, 임베딩 검색(Q60, 3단계 후보).
+범위 밖: 앱 안의 LLM 호출(Q36), 협업·클라우드 동기화. (로컬 임베딩 뜻 검색은 v3.11에 선택 기능으로 들어옴, Q83-A)
 
 ## 2. 설계 원칙 (불변 조건)
 
@@ -31,6 +31,10 @@
 보충 (v3.8):
 - **P3** — 콘솔 패널의 **AI 탭**은 사용자가 `+ AI`를 눌러 연 대화형 터미널이다. 앱은 입력을 보내지 않고 사용자 키 입력만 전달한다(자동 실행 없음).
 - **P6** — AI 탭의 Claude Code·Codex가 노드를 바꾸는 길은 **`am` 명령**뿐이다. `am`은 앱 함수로 키 단위로 쓰고, 바꾸기 전 보관(P5)·`am undo`·히스토리(`actor: ai-tab`)를 남긴다. 라이브러리 `.claude/settings.json`이 규칙 파일 직접 편집을 막는다(`deny`). Codex는 이런 권한 파일이 없어 루트 `AGENTS.md`의 규칙으로만 막는다. 구조를 크게 바꾸는 일은 `am tidy` → 앱 미리보기(P4).
+
+보충 (v3.11, Q83-A):
+- **P3** — 뜻 검색의 로컬 임베딩 모델(ONNX, CPU)은 AI API가 아니라 계산 라이브러리다. 앱이 인터넷에 닿는 것은 설정의 **"뜻 검색 켜기" 버튼**을 눌렀을 때 한 번(pip 설치 + 리비전·sha256 고정 모델 내려받기)뿐이다.
+- **P2** — 뜻 검색이 켜져 있으면 `search`(→ 참고 예시)가 임베딩 점수를 쓴다. 스레드 1개·반올림·id 동점 정렬로 같은 모델·같은 폴더 상태에서는 같은 결과다. 켜짐/꺼짐은 이 PC의 상태(`.assets/embed/config.json`)이고, 꺼져 있으면 v3.10 검색과 글자 하나까지 같다.
 
 보충 (v3.10, Q82-A):
 - **이미지의 기준은 원본 파일이다.** 이미지 키는 스타일을 글로 넘기지 않는다: 키 지시문·엣지 `note`·레퍼런스 `spec`·`check`·구성 요소·우선순위 문장을 프롬프트에 넣지 않고, 원본(+`similar_to`로 묶인 원본)만 ImageGen 참조로 넘긴다. 사용자가 세트에 쓴 텍스트 값만 "원본과 다르게 할 점"으로 들어간다. 원본이 없으면 글로 대신하지 않고 빼며 경고한다. 덜어내기도 이미지를 글·컨택트 시트로 바꾸지 않는다.
@@ -90,13 +94,14 @@
 | `core/terminal.py` | AI 탭 터미널 세션(v3.8): Windows ConPTY(pywinpty)·POSIX pty, 출력 고리 버퍼, 긴 폴링 읽기, 크기 조절, 종료. `am` 실행 파일(`.assets/bin`), 라이브러리 `.claude/settings.json` 권한 합치기 | `start`, `Session`(`read`, `write`, `resize`, `close`), `close_all`, `write_shims`, `ensure_permissions` | `local_ai`(도구 경로), pywinpty(Windows) |
 | `core/export_cmd.py` | AI 대화창에 붙여넣는 내보내기 명령 (노드별: 요청 생성 / 일반: `@target`) | `build` | `folder_requests` |
 | `core/extract.py` | 결정적 값 추출 (이미지·글·HTML/CSS·PDF). 단독 실행 가능, 외부 AI 코드 실행 환경에도 그대로 올라감 | `extract`, `kind_of` | Pillow, (선택) PyMuPDF |
-| `core/search.py` | 결정적 키워드 검색 (단어 + 3글자 조각, 필드 가중치) | `search`, `grams`, `fields` | 없음 |
-| `core/rag.py` | `노드id#부분` 조각 JSONL 내보내기 | `chunks`, `export_jsonl` | `engine` |
+| `core/search.py` | 결정적 키워드 검색 (단어 + 3글자 조각, 필드 가중치) + 뜻 검색이 켜져 있으면 임베딩 점수와 섞기(v3.11) | `search`, `grams`, `fields`, `_semantic`, `_blend` | `embed`(지연 import, 실패하면 키워드만) |
+| `core/embed.py` | 로컬 임베딩(v3.11, Q83-A): multilingual-e5-small q8 ONNX(리비전·sha256 고정), 조각 벡터 캐시, 켜기 작업(pip → 내려받기·검증 → 켜기 → 색인) | `status`, `active`, `set_enabled`, `install`, `index`, `scores`, `encode`, `set_encoder`(테스트용) | `rag.node_parts`, onnxruntime·tokenizers·numpy(선택) |
+| `core/rag.py` | `노드id#부분` 조각 JSONL 내보내기. 노드 → 조각은 `node_parts`(임베딩과 공용) | `node_parts`, `chunks`, `export_jsonl` | `engine` |
 | `core/mcp_server.py` | MCP 서버 (stdio JSON-RPC 2.0, 외부 패키지 없음) | `handle`, `call`, `TOOLS` | `engine`, `search` |
 | `ui/app.js` | 화면 전체 (빌드 단계 없음) | `loadGraph`, `select`, `render*`, `refreshPackage`, `handleDrop`, `openOutcome`, `confirmOutcome`, `copyExport` | Cytoscape·xterm.js 5.5 + addon-fit(번들, `ui/vendor/`), Tauri 전역(`window.__TAURI__`) |
 | `src-tauri/src/main.rs` | 셸, 사이드카 실행(`py` → `python` 순서), 종료 처리 | `spawn_server` | tauri 2, tauri-plugin-drag 2 |
 | `defaults/` | 앱 번들 기본값 (`keys.yaml`, `targets.yaml`, `defaults.md`) — 라이브러리에 없으면 복사 | | |
-| `tests/` | 단위·통합 테스트 96개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310` | |
+| `tests/` | 단위·통합 테스트 102개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed` | |
 
 ## 5. 데이터 모델
 
@@ -211,6 +216,13 @@ v4(v3.9): `shape_style`(도형, `image_style`보다 도형에 관해 우선) 추
 ### 6.4 검색 (`search.search`)
 질의와 문서(title, keywords, task, tags, summary, spec, 텍스트 본문 6000자)를 단어(`w:`) + 3글자 조각(`g:`, 짧은 단어는 2글자)으로 쪼갠다. 점수 = Σ 필드 가중치 × BM25식 idf × (1 + log tf) × (단어 일치면 2배). 동점은 id 순 → 결정적.
 
+뜻 검색 (v3.11, Q83-A, `embed.active(root)`일 때만):
+- 후보 노드마다 `rag.node_parts` 조각을 `"passage: " + 글`로, 질의는 `"query: " + 질의`로 임베딩(평균 풀링 + L2 정규화, 최대 512토큰, 묶음 16, 스레드 1, 벡터 소수 6자리). 노드의 뜻 점수 = 조각 코사인 최댓값(4자리).
+- `_blend`: 최종 `score` = `W_KW`(0.5) × 키워드/그 질의의 최고 키워드 점수 + `W_SEM`(0.5) × clamp((코사인 − `SEM_FLOOR` 0.80) / (`SEM_CEIL` 0.90 − 0.80)), 4자리. 키워드 0점인 노드는 코사인 ≥ `SEM_ONLY_MIN`(0.85)일 때만 남긴다. 결과에 `kw`(원래 키워드 점수)·`sem`(코사인)이 붙는다. 동점은 id 순.
+- 벡터 캐시: 키 = sha1(모델 키 + 조각 글) 앞 16자 → `.assets/embed/vectors.json`(`{model, vecs}`, 모델 키가 다르면 버림). 검색 때 없는 조각만 계산해 더한다. `index`(켜기·다시 색인)는 전체를 계산하고 안 쓰는 벡터를 지운다.
+- 인코더 오류는 stderr에 남기고 키워드 결과만 돌려준다.
+- 켜기 `install(root, get_lib)`: 스레드에서 (패키지가 없으면) `python -m pip install onnxruntime tokenizers` → 모델 파일을 `huggingface.co/<REPO>/resolve/<REV>/…`에서 `.part`로 받으며 sha256 확인 → `verified` 표시 → `enabled: true` → `index`. 이미 있는 파일도 sha256이 맞아야 건너뛴다. 상태는 메모리 `_JOBS`(state running/done/failed, step, 받은 바이트, 조각 수).
+
 ### 6.5 AI 요청 수명 (`folder_requests`)
 ```
 prepare / new_request ──► package ──► (외부 AI) ──► receive_zip 또는 에이전트가 out/에 씀
@@ -293,6 +305,8 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 | `.assets/skills-manifest.json` | 내보낸 스킬 기록 (경로별 세트·hash·SKILL.md 지문·파일 목록) | 아니오 | 아니오 |
 | `.assets/components/<id>/` | 구성 요소 캐시: `<id>.<요소>.png`(잘라 낸 그림·구도 도식) + `stamp.txt` (원본·요소가 같으면 다시 그리지 않음, 지우면 다시 그림) | 아니오 | 아니오 |
 | `.assets/console/undo.jsonl` | `am` 되돌리기 스택 (바뀌기 전 파일 내용) | 아니오 | 아니오 |
+| `.assets/embed/config.json` · `vectors.json` | 뜻 검색 켜짐 여부(기기별) · 조각 벡터 캐시 (지우면 다시 계산) (v3.11) | 아니오 | 아니오 |
+| `%LOCALAPPDATA%/assets-manager/models/<모델 키>/` (`AM_MODEL_DIR`로 바꿀 수 있음) | 라이브러리 **밖**: 임베딩 모델 파일 + `verified`. 여러 라이브러리가 함께 씀 | 아니오 | 아니오 |
 | `.assets/bin/am` `am.cmd` | `am` 실행 파일 (서버 시작 때 이 PC의 Python·경로로 다시 씀) | 아니오 | 아니오 |
 | `.claude/settings.json` | 라이브러리에서 뜨는 Claude Code 권한: `am` 허용, 규칙 파일 직접 편집 금지 (앱은 빠진 항목만 더함) | 예 | 아니오 |
 | `index.md` `graph.json` | 자동 생성 | **아니오** | 아니오 |
@@ -330,6 +344,8 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 | POST `/api/components/<rid>/receive` {text} · `/preview` {edits} · `/apply` {selected} | AI 답 붙여넣기 → 미리보기(상자 수정 합치기) → 반영 |
 | POST `/api/components/node/<id>` {components} | 반영된 요소 목록 저장(상자 고치기·빼기) |
 | POST `/api/request/<rid>/target` {node} | 결과를 둘 노드 지정(빈 공간에 놓은 경우) → 미리보기 |
+| GET `/api/embed` | 뜻 검색 상태 `{enabled, deps, model, active, model_name, model_dir, download_mb, vectors, job}` (v3.11) |
+| POST `/api/embed/install` · `/api/embed/config` {enabled} | 켜기(내려받기·색인, 백그라운드, 다시 누르면 다시 색인) · 끄기/켜기만 |
 | GET `/api/local-ai` · `/api/local-ai/job/<jid>` | 로컬 AI 도구 상태(처음이면 찾기)·`ready` · 작업 상태와 로그 끝부분 |
 | POST `/api/local-ai/detect` · `/config` {default, tools{name:{enabled, custom_path, args}}} · `/test` {tool} | 다시 찾기 · 설정 · 연결 시험(짧은 질문, 최대 3분) |
 | POST `/api/local-ai/run` {kind: tidy\|components\|request\|authoring, request?, files?, note?, tool?} · `/job/<jid>/cancel` | 실행(연결 안 됐으면 409 `needs_setup`) · 취소 |
@@ -355,7 +371,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 | 도구 | 입력 | 출력 |
 |---|---|---|
 | `standard` | task, set? | `{found, set, candidates, prompt}` — 작업에 맞는 표준을 찾아 조립 (v3.7) |
-| `search` | query, kind?, set?, limit? | `[{id, score, title, kind, type, set}]` |
+| `search` | query, kind?, set?, limit? | `[{id, score, title, kind, type, set}]` (뜻 검색이 켜져 있으면 `kw`·`sem`도) |
 | `get` | id | 노드 메타 + `final_rules`(규칙 노드) + `text`(텍스트 원본 일부) + `abs_file` |
 | `related` | id | 그 노드에 닿는 엣지 목록 |
 | `assemble` | id, task?, target? | `{prompt(경로 포함), files, warnings, violations}` |
@@ -379,6 +395,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 ## 11. UI 구조 (`ui/app.js`)
 
 - 설정 창(`#settings-dialog`, 상단 `설정` 버튼·초록 점 = 연결됨): `openSettings({reason, then})` — 도구 카드(찾음/버전/기본 선택/사용/연결 시험/설치 명령 복사/고급: 직접 경로·실행 인자). `reason`이 있으면 위에 '이 기능은 AI가 필요합니다' 안내와 단계, 연결되면 `계속하기`로 원래 작업을 이어 실행. 진행 표시 `#job-bar`(`runLocal`·`pollJob`·`renderJobs`: 경과 시간, 로그 보기, 취소, 실패 사유).
+- 설정 창의 뜻 검색 칸(v3.11, `loadEmbedBox`, `#embed-box`): 켜짐/꺼짐, 모델·패키지·색인 조각 수, `내려받고 켜기`/`켜기`·`끄기`·`다시 색인`. 작업 중에는 창이 열려 있고 보일 때만 1.5초마다 상태를 다시 읽는다.
 - 스킬: 그래프의 태그 모양 노드(보라 = 라이브러리 안, 파랑 = 개인 폴더, 이중 테두리 = 도구 스킬, 점선 = 갱신 필요, 빨강 = 직접 고침), 상단 `스킬` 토글. 세트 상세의 `#skill-box`(`loadSkillBox`: 범위×도구 상태 표, 내보내기·다시 내보내기·제거, 충돌 diff와 덮어쓰기, SKILL.md 미리보기), 스킬 상세 `renderSkill`.
 - 라이브러리 스킬: 초록 태그 노드(`libskill`). 상세 `renderLibSkill`(설명, 붙인 노드·떼기, 상속으로 받는 세트, 붙이기+범위 안내 `scopeHint`, 원칙으로 풀기, 파일, 가져온 곳·되살리기). 규칙 상세의 `skillsHtml`(함께 쓰는 스킬 + 붙이기). 설치된 스킬 상세의 '앱으로 가져오기'(붙일 노드, 원래 스킬 끄기). 설정 창 `callerHtml`(개인 스킬·전역 지침 설치/제거, 직접 부르는 명령).
 - 하위 정리 창(`#tidy-dialog`): `openTidy` → (열린 요청이 있으면 이어서) 1 진단 · 2 요청 복사 · 3 답 붙여넣기 → `showTidyPreview`(왜, 전·후 미니 그래프 `miniGraph`, 최종 프롬프트 비교, 변경 체크) → `applyTidy` → `arrangeTidy`(세트는 깊이 순 아래로, 원칙은 오른쪽 줄, 레퍼런스는 왼쪽 줄로 다시 배치하고 저장).
@@ -411,12 +428,14 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 | `test_standards.py` | 스킬 노드 보관·붙이기·조립, 표준 찾기·`cli.py standard`, 설치된 스킬 가져오기(원래 끄기), 스킬 폴더를 노드에 놓기, AI가 부르게 하기(개인 스킬·전역 지침 줄), 원칙으로 풀기 요청, 스킬 휴지통(폴더째) |
 | `test_components.py` | 구성 요소(이미지가 아닌 키 `chart_style`로): 메타 정리·경고, 원본 + 요소 첨부 렌더·파일 생성, 결정성(같은 PNG·프롬프트), 이미지 키는 요소 없이 원본만, `ref:<id>#<요소>`·없는 요소 오류, 덜어내기(요소 먼저 글로), 요소 없으면 프롬프트 그대로, 요청 왕복(격자·붙여넣기·상자 수정·반영·다른 필드 보존), 기존 요소 바꾸기 기본 꺼짐·에이전트 경로, zip → `case: components`, 사람 수정 저장, 스킬 내보내기에 요소 포함 |
 | `test_v310.py` | 이미지 키(Q82-A): 규칙 단락·spec·ref check·우선순위 문장 없음, ImageGen판(chatgpt_web)·요청서판(claude_desktop·codex), 비슷한 원본 양방향·중복·원본 없는 것 제외, 원본 없음 경고, 덜어내기(비슷한 원본 먼저, 글·시트 변환 없음), 이미지 키 없으면 단락 없음, 옛 기본값 대비·사용자 `image: true` 키, 결정성 |
+| `test_embed.py` | 뜻 검색(가짜 인코더): 꺼져 있으면 키워드 검색 그대로·인코더 안 부름, 켜면 낱말이 안 겹쳐도 뜻으로 찾고 관계없는 것은 뺌·결정성, 벡터 캐시·바뀐 조각만 다시 계산·`index`의 정리, 참고 예시에 반영, 인코더 오류 시 키워드로, 모델 없으면 켜도 키워드 |
 | `test_console.py` | `am` set·unset·undo(본문 보존), use·inherit·순환 거부, new·rename·기록의 actor, 오류, 명령줄 연결(`cli.py set`·`standard`), 파일 서명, `.claude/settings.json` 합치기(사용자 항목 유지·깨진 JSON 보존), `am` 실행 파일, POSIX pty 세션(환경·한글 입출력·1개 제한·종료) |
 
 UI는 자동 테스트가 없다. 변경 후 브라우저 모드(`start.bat browser`)로 확인한다.
 
 ## 13. 실행과 배포
 
+- 뜻 검색(선택, v3.11): `requirements.txt`에 넣지 않는다. 설정의 버튼이 서버를 돌리는 Python에 `onnxruntime`·`tokenizers`를 설치하고 모델(약 135MB)을 사용자 캐시 폴더에 받는다.
 - `start.bat`(라이브러리 루트): Python 확인 → 패키지 설치(최초) → (선택) AI 탭용 `pywinpty` 설치, 실패해도 계속 → 8765 포트의 이전 서버 정리 → 빌드된 exe / `npm run dev` / 브라우저 모드. 메시지는 영문만(cmd 한글 파싱 문제).
 - 앱 코드 이력: `app/`에서 `git log`. 코드를 바꾼 작업은 끝날 때 `app/`에서 커밋한다(라이브러리 데이터의 자동 기록과 별개).
 - 서버 시작 시 포트가 막혀 있으면 이전 서버에 `/api/shutdown`을 요청하고 인계받는다.
@@ -432,7 +451,7 @@ UI는 자동 테스트가 없다. 변경 후 브라우저 모드(`start.bat brow
 | 이미지 키 추가 | `keys.yaml`에 `image: true` (지시문·check 없이). ImageGen 단락 문구는 `engine.image_lines` |
 | 새 레퍼런스 타입 | `engine.REF_TYPES`, `REF_FOLDERS`, `EXT_TYPE`, `store.TYPE_FOLDER`/`EXT_TYPE`, `extract.kind_of`, UI `TYPE_LABEL` |
 | 예상 결과 선택지 | `drops.OPT`, `stage`의 분기, `commit`의 실행부, UI `choiceHtml` |
-| 임베딩 검색 | `search.search`의 내부만 교체 (입구 시그니처 유지) |
+| 임베딩 검색 | 섞는 비율·구간: `search.W_KW`·`W_SEM`·`SEM_FLOOR`·`SEM_CEIL`·`SEM_ONLY_MIN`. 모델 교체: `embed.REPO`·`REV`·`FILES`·`MODEL_KEY`(바꾸면 벡터 캐시는 자동으로 버려짐), e5가 아니면 `query:`·`passage:` 접두어도 |
 | MCP 도구 | `mcp_server.TOOLS` + `call` |
 | 원칙 프리셋 나누기 | 앱의 `하위 정리 (AI)`로 AI에게 맡기거나, `principles/dev-*.md`(키 묶음 이동) + 세트의 `uses` 직접 수정. 새 주제면 `keys.yaml`에 dev 키 추가 |
 | 정리 op 추가 | `tidy._apply_op`, `OP_LABEL`, `render`의 형식 예시, UI `itemText`·`OP_ICON` |

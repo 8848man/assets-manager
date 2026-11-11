@@ -20,6 +20,7 @@
 | 작업 → 표준 찾기 (CLI·MCP `standard`) | `core/standards.py`, `core/cli.py` |
 | `am` 노드 명령 (콘솔 탭·명령줄·AI 탭 공통) | `core/console.py` |
 | AI 탭 터미널(pty), `am` 실행 파일, `.claude/settings.json` 권한 | `core/terminal.py` |
+| 검색·뜻 검색(로컬 임베딩) | `core/search.py`, `core/embed.py` |
 | 파일 변경 감지·Library 캐시 | `engine.library_signature`, `server.library` |
 | 기록·버전·휴지통·Git·가져오기 | `core/store.py` |
 | API 경로 추가 | `core/server.py` (`do_GET`, `do_POST`) |
@@ -30,7 +31,7 @@
 ## 명령
 ```
 # 라이브러리 루트(app의 상위)에서
-python -m unittest discover -s app/tests     # 테스트 (96개, 모두 통과해야 함)
+python -m unittest discover -s app/tests     # 테스트 (102개, 모두 통과해야 함)
 python app/core/server.py                    # 서버 → http://127.0.0.1:8765
 python app/core/extract.py <파일>             # 결정적 값 추출
 python app/core/rag.py                       # RAG JSONL 내보내기

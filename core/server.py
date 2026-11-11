@@ -31,12 +31,13 @@ import store  # noqa: E402
 import tidy  # noqa: E402
 import components  # noqa: E402
 import local_ai  # noqa: E402
+import embed  # noqa: E402
 import skills  # noqa: E402
 import console  # noqa: E402
 import terminal  # noqa: E402
 from engine import library_signature  # noqa: E402
 
-APP_VERSION = "0.14.1"  # UI(app.js)의 APP_VERSION과 같아야 함
+APP_VERSION = "0.15.0"  # UI(app.js)의 APP_VERSION과 같아야 함
 UI_DIR = os.path.join(APP_DIR, "ui")
 LOCK = threading.Lock()
 STATE: dict = {}
@@ -163,6 +164,8 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/api/local-ai/job/([A-Za-z0-9_-]+)", u.path)
             if m:
                 return self._json(local_ai.get_job(library().root, m.group(1)))
+            if p == "/api/embed":  # Q83-A 뜻 검색(로컬 임베딩) 상태
+                return self._json(embed.status(STATE["root"]))
             if p == "/api/changes":  # v3.8 파일 변경 감지 (UI가 창이 보일 때만 폴링)
                 return self._json({"sig": library_signature(STATE["root"])})
             if p == "/api/term":  # v3.8 터미널 세션 목록·사용 가능 여부
@@ -331,6 +334,10 @@ class Handler(BaseHTTPRequestHandler):
                 lib = library()
                 return self._json(skills.remove(lib, body["set"], body.get("scope", "library"),
                                                 body.get("agents") or list(skills.AGENTS), bool(body.get("force"))))
+            if u.path == "/api/embed/install":  # 사용자가 누른 버튼으로만: 패키지·모델 받기 → 켜기 → 색인
+                return self._json(embed.install(STATE["root"], library))
+            if u.path == "/api/embed/config":
+                return self._json(embed.set_enabled(STATE["root"], bool(body.get("enabled"))))
             if u.path == "/api/local-ai/detect":
                 root = library().root
                 local_ai.detect(root)

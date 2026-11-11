@@ -1,5 +1,5 @@
 /* Assets Manager UI — 그래프, 상세 패널, 드롭 영역, AI 작성 흐름, 가져오기, 기록과 되돌리기 (기획서 v3) */
-const APP_VERSION = "0.14.1"; // server.py의 APP_VERSION과 같아야 함
+const APP_VERSION = "0.15.0"; // server.py의 APP_VERSION과 같아야 함
 const API = location.port === "8765" ? "" : "http://127.0.0.1:8765";
 const TAURI = window.__TAURI__ || null;
 const $ = (s) => document.querySelector(s);
@@ -1266,6 +1266,7 @@ function renderSettings(st) {
     renderSettings(await post("/api/local-ai/config", { tools: { [b.dataset.argsReset]: { args: null } } })); toast("기본 인자로 되돌렸습니다");
   }));
   document.querySelectorAll("[data-copycmd]").forEach((b) => b.addEventListener("click", () => copy(b.dataset.copycmd).then(() => toast("명령을 복사했습니다. 터미널에 붙여넣으세요"))));
+  loadEmbedBox();
   callerHtml().then((h) => {
     if (!h || !$("#settings-dialog").open) return;
     $("#caller-box")?.remove();
@@ -1516,6 +1517,29 @@ function renderLibSkill(n) {
 }
 
 /* AI가 Assets Manager를 부르게 하기 (설정 창 섹션) */
+/* ---------------------------------------------------------------- 뜻 검색: 로컬 임베딩 (Q83-A) */
+async function loadEmbedBox() {
+  let st; try { st = await api("/api/embed"); } catch (e) { return; }
+  if (!$("#settings-dialog").open) return;
+  let box = $("#embed-box");
+  if (!box) { $("#settings-body").insertAdjacentHTML("beforeend", `<div id="embed-box"></div>`); box = $("#embed-box"); }
+  const j = st.job, running = j && j.state === "running";
+  const pct = j && j.total_bytes ? Math.min(100, Math.round((j.done_bytes / j.total_bytes) * 100)) : 0;
+  const chip = st.active ? `<span class="chip ok">켜짐</span>` : st.enabled ? `<span class="chip warnchip">켜짐 · 모델 없음</span>` : `<span class="chip">꺼짐</span>`;
+  box.innerHTML = `<h3>뜻 검색 (로컬 임베딩) ${chip}</h3>
+    <p class="muted">참고 예시·검색·MCP <code>search</code>에서 낱말이 달라도 뜻이 가까운 산출물·레퍼런스를 함께 찾습니다. 키워드 점수와 반씩 섞고, 모델은 이 PC의 CPU에서만 돕니다(외부 API 없음).
+      켜면 처음 한 번만 패키지(onnxruntime, tokenizers)를 설치하고 모델 약 ${st.download_mb}MB를 내려받습니다. 끄면 지금의 키워드 검색과 똑같습니다.</p>
+    <div class="meta-line">모델 ${esc(st.model_name)} · ${st.model ? "준비됨" : "없음"} · 패키지 ${st.deps ? "있음" : "없음"} · 색인 조각 ${st.vectors}개</div>
+    ${running ? `<div class="meta-line">${esc(j.step)}${j.step === "모델 내려받기" ? ` · ${pct}%` : ""} …</div>`
+      : j && j.state === "failed" ? `<div class="bad">✗ ${esc(j.error || "실패")}</div>`
+      : j && j.state === "done" ? `<div class="ok">✓ 켰습니다 · 조각 ${j.chunks}개 색인</div>` : ""}
+    <div class="row">${st.active ? `<button class="small" id="embed-off">끄기</button><button class="ghost small" id="embed-on">다시 색인</button>`
+      : `<button class="small primary" id="embed-on" ${running ? "disabled" : ""}>${st.model && st.deps ? "켜기" : "내려받고 켜기"}</button>`}</div>`;
+  $("#embed-on")?.addEventListener("click", async (e) => { e.target.disabled = true; await post("/api/embed/install", {}); loadEmbedBox(); });
+  $("#embed-off")?.addEventListener("click", async () => { await post("/api/embed/config", { enabled: false }); loadEmbedBox(); });
+  if (running) setTimeout(() => { if ($("#settings-dialog").open && document.visibilityState === "visible") loadEmbedBox(); }, 1500);
+}
+
 async function callerHtml() {
   let c; try { c = await api("/api/caller"); } catch (e) { return ""; }
   return `<h3>AI가 Assets Manager를 부르게 하기</h3>

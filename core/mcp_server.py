@@ -2,7 +2,7 @@
 
 표준 입출력(stdio)으로 JSON-RPC 2.0을 주고받는다. 외부 패키지 없이 동작한다.
 도구:
-  search(query, kind?, set?, limit?)   결정적 키워드 검색
+  search(query, kind?, set?, limit?)   결정적 검색 (키워드 + 켜져 있으면 로컬 임베딩)
   get(id)                              노드 하나 (메타, 규칙, 본문 일부)
   related(id)                          그래프 이웃 (상속, 키, 정보 엣지)
   assemble(id, task?, target?)         세트의 결정적 조립 프롬프트 (+ 참고 예시)
@@ -29,7 +29,7 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {
          "task": {"type": "string", "description": "맡은 작업 한 줄 (예: '네이버 블로그 여름 휴가 글')"},
          "set": {"type": "string", "description": "특정 세트 id (후보 중 다른 것을 고를 때)"}}, "required": ["task"]}},
-    {"name": "search", "description": "Assets Manager 라이브러리에서 세트·레퍼런스·산출물을 키워드로 찾습니다. 같은 질의면 항상 같은 결과입니다.",
+    {"name": "search", "description": "Assets Manager 라이브러리에서 세트·레퍼런스·산출물을 키워드(뜻 검색이 켜져 있으면 뜻까지)로 찾습니다. 같은 질의면 항상 같은 결과입니다.",
      "inputSchema": {"type": "object", "properties": {
          "query": {"type": "string", "description": "찾을 내용 (예: '블로그 차트 스타일', 'AI 비서 소개 글')"},
          "kind": {"type": "string", "enum": ["rule", "reference", "output"], "description": "노드 종류로 좁히기 (선택)"},
