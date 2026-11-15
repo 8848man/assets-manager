@@ -12,7 +12,7 @@ import zipfile
 
 CORE = os.path.join(os.path.dirname(__file__), "..", "core")
 sys.path.insert(0, CORE)
-from engine import Library  # noqa: E402
+from engine import Library, RuleConflictError  # noqa: E402
 import drops  # noqa: E402
 import export_cmd  # noqa: E402
 import folder_requests as freq  # noqa: E402
@@ -52,6 +52,25 @@ class V33Test(unittest.TestCase):
 
     def lib(self):
         return Library(self.root)
+
+    def test_principle_list_merge_and_single_conflict(self):
+        rule(self.root, "principles/a.md", "a", None, "  forbidden: 추측, 과장\n  tone: 짧게\n", "kind: principle\n")
+        rule(self.root, "principles/b.md", "b", None, "  forbidden: 과장, 출처 없음\n  tone: 길게\n", "kind: principle\n")
+        write(self.root, "sets/blog.md", "---\nid: blog\ntype: rule\nkind: set\ntitle: 블로그\ninherits: [global]\nuses: [a, b]\nrules: {}\n---\n")
+        with self.assertRaises(RuleConflictError) as err:
+            self.lib().assemble("blog")
+        self.assertEqual((err.exception.key, err.exception.first, err.exception.second), ("tone", "a", "b"))
+        write(self.root, "principles/b.md", "---\nid: b\ntype: rule\nkind: principle\ntitle: b\nrules:\n  forbidden: 과장, 출처 없음\n---\n")
+        entries = {e["key"]: e for e in self.lib().assemble("blog")["entries"]}
+        self.assertEqual(entries["forbidden"]["value"], "추측, 과장, 출처 없음")
+
+    def test_role_split_uses_tidy_plan_and_preview(self):
+        import tidy
+        req = tidy.build(self.lib(), "blog", "chatgpt_web", {"kind": "role_split"})
+        self.assertIn("역할별 원칙으로 나누기", req["prompt"])
+        self.assertIn("create_rule", req["prompt"])
+        self.assertIn("move_rule", req["prompt"])
+        self.assertIn("set_uses", req["prompt"])
 
     # ------------------------------------------------ 검색과 참고 예시
     def test_search_keywords_and_determinism(self):

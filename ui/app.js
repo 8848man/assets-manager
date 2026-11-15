@@ -1,5 +1,5 @@
 /* Assets Manager UI — 그래프, 상세 패널, 드롭 영역, AI 작성 흐름, 가져오기, 기록과 되돌리기 (기획서 v3) */
-const APP_VERSION = "0.15.0"; // server.py의 APP_VERSION과 같아야 함
+const APP_VERSION = "0.16.0"; // server.py의 APP_VERSION과 같아야 함
 const API = location.port === "8765" ? "" : "http://127.0.0.1:8765";
 const TAURI = window.__TAURI__ || null;
 const $ = (s) => document.querySelector(s);
@@ -222,7 +222,12 @@ async function select(id, keepScroll) {
   state.selected = id;
   state.cy.$(":selected").unselect();
   state.cy.getElementById(id).select();
-  const n = await api("/api/node/" + encodeURIComponent(id));
+  let n;
+  try { n = await api("/api/node/" + encodeURIComponent(id)); }
+  catch (e) {
+    if (id === state.selected) $("#detail").innerHTML = `<div class="empty"><p class="empty-title">조립을 멈췄습니다</p><p>${esc(e.message)}</p><p>어느 원칙의 값을 유지할지 결정하고 해당 원칙을 수정한 뒤 다시 선택하세요.</p></div>`;
+    return;
+  }
   if (id !== state.selected) return;
   if (n.type === "ai") return renderAi(n);
   if (n.type === "installed_skill") return renderSkill(n.skill);
@@ -241,8 +246,9 @@ function headHtml(n, deletable = true) {
   if (n.type !== "ai" && n.exists === false && n.kind !== "unregistered" && n.type !== "rule") chips.push(`<span class="chip internal">원본 없음</span>`);
   const del = deletable && n.kind !== "defaults" ? `<button class="ghost small danger-text" id="del-btn" title="휴지통으로 옮깁니다. 언제든 복구할 수 있습니다.">삭제</button>` : "";
   const tidyBtn = n.type === "rule" && n.kind !== "defaults" ? `<button class="ghost small" id="tidy-btn" title="이 노드 아래(상속 자식, 원칙, 레퍼런스)의 구조를 AI가 분석해 정리안을 냅니다. 반영 전에 전·후를 보여 줍니다">하위 정리 (AI)</button>` : "";
+  const rolesBtn = n.kind === "set" ? `<button class="ghost small" id="roles-btn" title="세트의 규칙을 역할별 원칙으로 나누는 계획을 받고 미리봅니다">역할별로 나누기</button>` : "";
   const exp = deletable && n.kind !== "unregistered" ? `<button class="ghost small" id="export-node-btn" title="AI 대화창에 붙여넣으면 그 대화의 결과물을 이 노드로 보낼 zip을 만들어 줍니다">이 노드로 내보내기 명령 복사</button>` : "";
-  return `<div class="head"><div class="head-row"><div>${chips.join("")}</div><div class="row" style="margin:0">${tidyBtn}${exp}${del}</div></div><h1>${esc(n.title)}</h1><div class="meta-line">${esc(n.id)} · ${esc(n.path || n.file || "")}</div></div>` +
+  return `<div class="head"><div class="head-row"><div>${chips.join("")}</div><div class="row" style="margin:0">${rolesBtn}${tidyBtn}${exp}${del}</div></div><h1>${esc(n.title)}</h1><div class="meta-line">${esc(n.id)} · ${esc(n.path || n.file || "")}</div></div>` +
     (n.issues || []).map((i) => `<div class="issue ${i.level}" style="margin-bottom:6px">${esc(i.message)}</div>`).join("");
 }
 
@@ -267,6 +273,7 @@ function bindCommon(n) {
   $("#del-btn")?.addEventListener("click", () => deleteNode(n));
   $("#export-node-btn")?.addEventListener("click", () => copyExport(n.id));
   $("#tidy-btn")?.addEventListener("click", () => openTidy(n.id));
+  $("#roles-btn")?.addEventListener("click", () => openTidy(n.id, "roles"));
   $("#promote-btn")?.addEventListener("click", () => promote(n, false));
   $("#rewrite-btn")?.addEventListener("click", () => renderUnregistered(n, true));
   document.querySelectorAll("[data-restore-rel]").forEach((b) => b.addEventListener("click", async () => {
@@ -545,7 +552,8 @@ function renderUnregistered(n, rewrite) {
   $("#author-local").addEventListener("click", () => ensureLocalAI("파일 등록", () => {
     const files = state.author?.rels || [n.path];
     runLocal({ kind: "authoring", files, note: (state.notes || {})[n.id] || "" }, { label: `파일 등록 (${files.length}개)`,
-      onDone: async () => { await loadGraph(); toast("등록을 마쳤습니다. 새 노드를 확인하세요"); } });
+      onDone: async (j) => { if (j.ref?.request) return openResult(j.ref.request);
+        await loadGraph(); toast("등록을 마쳤습니다. 새 노드를 확인하세요"); } });
   }));
   highlight([], [], []);
   refreshAuthor(n);
@@ -1028,7 +1036,7 @@ function renderTidyRequest() {
   const t = state.tidy, r = t.req, n = state.graph.nodes.find((x) => x.id === t.node);
   const targets = Object.entries(state.graph.targets);
   const agent = state.graph.targets[t.target]?.kind === "agent";
-  $("#tidy-title").textContent = `하위 정리: ${n?.label || t.node}`;
+  $("#tidy-title").textContent = `${t.goal === "roles" ? "역할별로 나누기" : "하위 정리"}: ${n?.label || t.node}`;
   $("#tidy-body").innerHTML = `
     <p class="muted">이 노드 아래의 구조를 AI가 분석해 정리안을 냅니다. 앱은 AI를 직접 부르지 않습니다 — 요청을 복사해 AI에게 주고, 답을 여기에 붙여넣으세요. 반영하기 전에 전·후 그래프와 이유, 최종 프롬프트 변화를 보여 줍니다.</p>
     <div class="tidy-steps">
@@ -1267,6 +1275,7 @@ function renderSettings(st) {
   }));
   document.querySelectorAll("[data-copycmd]").forEach((b) => b.addEventListener("click", () => copy(b.dataset.copycmd).then(() => toast("명령을 복사했습니다. 터미널에 붙여넣으세요"))));
   loadEmbedBox();
+  loadRenderWebBox();
   callerHtml().then((h) => {
     if (!h || !$("#settings-dialog").open) return;
     $("#caller-box")?.remove();
@@ -1299,9 +1308,9 @@ function toolCard(t, st) {
          <div class="muted">로그인: ${esc(t.login)} · <a href="${esc(t.docs)}" target="_blank" rel="noopener">공식 안내</a></div></div>`}
     <details class="tool-adv"><summary>고급</summary>
       <div class="row"><input class="oc-input" id="path-${t.name}" value="${esc(t.custom_path || "")}" placeholder="직접 경로 지정 (예: C:\\Users\\me\\.local\\bin\\claude.exe)"><button class="small" data-path-save="${t.name}">경로 저장</button></div>
-      <div class="muted">실행 인자 (한 줄에 하나, <code>{instruction}</code> 자리에 요청 지시가 들어갑니다)</div>
-      <textarea id="args-${t.name}" rows="5" class="code-input">${esc((t.args || []).join("\n"))}</textarea>
-      <div class="row"><button class="small" data-args-save="${t.name}">인자 저장</button><button class="ghost small" data-args-reset="${t.name}">기본값으로</button></div>
+      <div class="muted">${t.name === "codex" ? "Codex는 읽기 전용 실행 인자를 고정해서 사용합니다." : "실행 인자 (한 줄에 하나, {instruction} 자리에 요청 지시가 들어갑니다)"}</div>
+      <textarea id="args-${t.name}" rows="5" class="code-input" ${t.name === "codex" ? "readonly" : ""}>${esc((t.args || []).join("\n"))}</textarea>
+      ${t.name === "codex" ? "" : `<div class="row"><button class="small" data-args-save="${t.name}">인자 저장</button><button class="ghost small" data-args-reset="${t.name}">기본값으로</button></div>`}
     </details>
   </div>`;
 }
@@ -1540,6 +1549,22 @@ async function loadEmbedBox() {
   if (running) setTimeout(() => { if ($("#settings-dialog").open && document.visibilityState === "visible") loadEmbedBox(); }, 1500);
 }
 
+async function loadRenderWebBox() {
+  let st; try { st = await api("/api/render-web"); } catch { return; }
+  if (!$("#settings-dialog").open) return;
+  let box = $("#render-web-box");
+  if (!box) { $("#settings-body").insertAdjacentHTML("beforeend", `<div id="render-web-box"></div>`); box = $("#render-web-box"); }
+  const running = st.job?.state === "running";
+  box.innerHTML = `<h3>HTML 렌더링·애니메이션 추출 <span class="chip ${st.active ? "ok" : ""}">${st.active ? "켜짐" : "꺼짐"}</span></h3>
+    <p class="muted">HTML 레퍼런스를 등록할 때 실제 화면의 계산된 스타일과 CSS 애니메이션을 함께 읽습니다. Chromium은 아래 버튼을 눌렀을 때만 받습니다. 렌더링은 로컬 파일을 오프라인으로 엽니다.</p>
+    ${running ? `<div class="meta-line">${esc(st.job.step)}…</div>` : st.job?.state === "failed" ? `<div class="bad">${esc(st.job.error)}</div>` : ""}
+    <div class="row">${st.active ? `<button class="small" id="render-web-off">끄기</button>` :
+      `<button class="primary small" id="render-web-on" ${running ? "disabled" : ""}>${st.ready ? "켜기" : "Chromium 내려받고 켜기"}</button>`}</div>`;
+  $("#render-web-on")?.addEventListener("click", async (e) => { e.target.disabled = true; await post(st.ready ? "/api/render-web/config" : "/api/render-web/install", st.ready ? { enabled: true } : {}); loadRenderWebBox(); });
+  $("#render-web-off")?.addEventListener("click", async () => { await post("/api/render-web/config", { enabled: false }); loadRenderWebBox(); });
+  if (running) setTimeout(() => { if ($("#settings-dialog").open && document.visibilityState === "visible") loadRenderWebBox(); }, 1500);
+}
+
 async function callerHtml() {
   let c; try { c = await api("/api/caller"); } catch (e) { return ""; }
   return `<h3>AI가 Assets Manager를 부르게 하기</h3>
@@ -1738,7 +1763,7 @@ async function conAddAI(tool) {
   const tab = { id: "ai-" + Date.now(), kind: "ai", tool, label: tool === "codex" ? "Codex" : "Claude Code", pane, note, term, fit, sid: null, next: 0, dead: false, idleAsked: false };
   CON.tabs.push(tab); conActivate(tab.id);
   await new Promise((r) => setTimeout(r, 30)); try { fit.fit(); } catch {}
-  term.write(`\x1b[2m${tab.label} 시작 중… (작업 폴더: 라이브러리, am 명령 사용 가능)\x1b[0m\r\n`);
+  term.write(`\x1b[2m${tab.label} 시작 중… (작업 폴더: 라이브러리, ${tool === "codex" ? "읽기 전용 · am 쓰기 불가" : "am 명령 사용 가능"})\x1b[0m\r\n`);
   let res;
   try { res = await conPost("/api/term/start", { tool, cols: term.cols, rows: term.rows }); } catch (e) { res = { error: conErr(e) }; }
   if (res.error) {

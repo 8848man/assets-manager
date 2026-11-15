@@ -1,7 +1,7 @@
 """Assets Manager 코어 엔진 (기획서 v2, 1단계 MVP).
 
 - 로더: 레퍼런스 노드(*.meta.yaml)와 규칙 노드(md 프런트매터)를 하나의 모델로 읽는다.
-- 조립: 다중 상속을 결정적으로 펼치고, 키 단위로 덮어쓰며 출처를 기록한다.
+- 조립: 다중 상속을 결정적으로 펼치고, 원칙의 목록 키는 합치며 단일 키 충돌은 중단한다.
 - 패키지: 대상 앱별 한도와 민감도를 검사하고, 자동 덜어내기(spec 대체 → 컨택트 시트 → 키 제외)를 수행한다.
 - 변경 통제: 조립 결과 스냅숏과 비교해 diff를 만든다.
 
@@ -55,6 +55,21 @@ PART_DEFAULTS = {
 IMAGE_KEYS_DEFAULT = ("character_style", "composition", "shape_style", "image_style")
 IMAGE_GEN_DEFAULT = ("chatgpt_web",)  # targets.yaml에 image_gen이 없을 때(기본값 v2) ImageGen이 있는 대상
 IMAGE_CHECK = "이미지는 첨부 원본을 참조 이미지로 썼고(또는 ImageGen 요청서로 남겼고), 스타일을 글로 바꿔 쓰지 않았는가"
+
+
+class RuleConflictError(ValueError):
+    """두 부품 원칙의 단일 키가 달라 사용자의 선택이 필요하다(Q86)."""
+
+    def __init__(self, key: str, first: str, second: str):
+        self.key, self.first, self.second = key, first, second
+        super().__init__(f"원칙 `{first}`와 `{second}`의 `{key}` 값이 충돌합니다. 어느 값을 사용할까요? 원칙을 고친 뒤 다시 조립하세요.")
+
+
+def _rule_items(value: Any) -> list[str]:
+    """목록 키는 YAML 목록과 기존 쉼표 구분 문자열을 모두 받아 순서대로 합친다."""
+    if isinstance(value, list):
+        return [str(x).strip() for x in value if str(x).strip()]
+    return [x.strip() for x in str(value or "").split(",") if x.strip()]
 
 
 def library_signature(root: str) -> str:
@@ -465,6 +480,7 @@ class Library:
         if nid in self.cyclic:
             raise CycleError(f"순환 상속 때문에 조립할 수 없음: {nid}")
         chain = self.sources(nid)
+        component_groups = [set(self.components(layer)) for layer in self.linearize(nid)]
         final: dict[str, dict] = {}
         history: dict[str, list] = {}
         priorities: dict[str, str] = {}
@@ -473,7 +489,17 @@ class Library:
             for key, r in n["rules"].items():
                 if key in final:
                     history.setdefault(key, []).append({"source": final[key]["source"], "value": final[key]["value"]})
-                final[key] = {"value": r["value"], "note": r["note"], "source": src}
+                    old = final[key]
+                    if old["source"] != src and any(old["source"] in group and src in group for group in component_groups):
+                        spec = self.key_spec(key)
+                        if spec.get("value_type") == "list":
+                            items = _rule_items(old["value"]) + _rule_items(r["value"])
+                            final[key] = {"value": ", ".join(dict.fromkeys(items)), "note": r["note"], "source": src}
+                            continue
+                        if old["value"] != r["value"]:
+                            raise RuleConflictError(key, old["source"], src)
+                value = ", ".join(dict.fromkeys(_rule_items(r["value"]))) if self.key_spec(key).get("value_type") == "list" else r["value"]
+                final[key] = {"value": value, "note": r["note"], "source": src}
             for key, p in (n.get("priorities") or {}).items():
                 priorities[key] = p
 

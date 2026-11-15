@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core"))
 from engine import Library  # noqa: E402
@@ -109,6 +110,34 @@ class LocalAiTests(unittest.TestCase):
         self.assertEqual(j["state"], "failed")
         self.assertIn("결과 파일이 없습니다", j["error"])
         self.assertIn("아무것도 안 씀", j["log"])
+
+    def test_codex_stdout_plan_is_saved_only_for_matching_request(self):
+        rid = "req-20261115-a"
+        expected = f"inbox/{rid}/out/plan.yaml"
+        text = (f"noise\n```yaml\nrequest: {rid}\nsummary: 안전한 계획\nops: []\n"
+                "inline_files:\n  web/example.meta.yaml: |\n    id: example\n    type: web\n```\n")
+        self.assertTrue(local_ai._save_stdout_plan(self.d, text, expected, rid))
+        with open(os.path.join(self.d, expected), encoding="utf-8") as f:
+            self.assertIn("안전한 계획", f.read())
+        with open(os.path.join(self.d, "inbox", rid, "out", "web", "example.meta.yaml"), encoding="utf-8") as f:
+            self.assertIn("id: example", f.read())
+        self.assertFalse(local_ai._save_stdout_plan(self.d, text, "sets/s.md", rid))
+        self.assertFalse(local_ai._save_stdout_plan(self.d, text, expected, "req-other"))
+        self.assertIn("--sandbox", local_ai.TOOLS["codex"]["args"])
+        self.assertIn("read-only", local_ai.TOOLS["codex"]["args"])
+        self.assertNotIn("--full-auto", local_ai.TOOLS["codex"]["args"])
+
+    def test_codex_authoring_prepares_preview_request_with_source(self):
+        write(self.d, "web/sample.html", "<html><title>Sample</title></html>")
+        lib = Library(self.d)
+        with patch.object(local_ai, "start", return_value={"id": "fake"}) as start:
+            local_ai.run_for(lib, {"kind": "authoring", "files": ["web/sample.html"],
+                                   "target": next(iter(lib.targets)), "tool": "codex"})
+        root, kind, prompt, ref, tool, expect = start.call_args.args
+        self.assertEqual((root, kind, tool), (self.d, "authoring", "codex"))
+        self.assertEqual(expect, [f"inbox/{ref['request']}/out/plan.yaml"])
+        self.assertTrue(os.path.isfile(prompt))
+        self.assertTrue(os.path.isfile(os.path.join(self.d, "inbox", ref["request"], "src", "sample.html")))
 
 
 if __name__ == "__main__":

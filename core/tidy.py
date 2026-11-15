@@ -187,6 +187,13 @@ def render(lib: Library, root: str, rid: str, ids: list[str], diags: list[dict],
               "- 전부 규칙형이라 스킬이 더 필요 없으면 `set_uses`에서 스킬을 빼세요. 스킬 노드 자체는 지우지 않습니다.",
               "- 새 원칙에 `relations: [{type: derived_from, target: " + sk["id"] + "}]`를 다세요.",
               "", "스킬 본문:", "```markdown", (sk.get("body") or "")[:8000], "```", ""]
+    if goal and goal.get("kind") == "role_split":
+        L += ["## 이번 정리의 목표: 역할별 원칙으로 나누기 (Q75)",
+              f"세트 `{root}`에 여러 역할의 규칙이 섞여 있으면 역할별 부품 원칙으로 나누세요.",
+              "- 역할은 현재 규칙의 실제 책임을 보고 정하세요. 새 역할이나 규칙을 지어내지 마세요.",
+              "- 필요한 경우 `create_rule`(kind: principle), `move_rule`, `set_uses`를 이 순서로 제안하세요.",
+              "- 이미 붙은 원칙과 같은 역할이면 기존 원칙을 재사용하세요. 단일 키가 충돌하면 합치거나 값을 골라 덮지 말고 그 사실을 `why`에 적고 관련 이동을 보류하세요.",
+              "- 최종 프롬프트가 달라지면 이유를 각 op의 `reason`에 적으세요. 앱의 미리보기에서 사용자가 변경을 확인합니다.", ""]
     L += ["## 앱이 찾은 구조 문제"]
     L += [f"- `{d['code']}` {d['message']}" for d in diags] or ["- (없음)"]
     L += ["", "## 현재 노드 (정리 범위)", "```yaml"]

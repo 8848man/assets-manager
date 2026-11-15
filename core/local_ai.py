@@ -16,12 +16,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import threading
 import time
 import uuid
+from pathlib import PurePosixPath
 
 CONFIG = os.path.join(".assets", "local_ai.json")
 JOBS = os.path.join(".assets", "local-ai", "jobs")
@@ -51,9 +53,9 @@ TOOLS = {
         "label": "Codex CLI",
         "exe": ["codex"],
         "candidates": ["%APPDATA%/npm/codex.cmd", "~/.local/bin/codex", "/usr/local/bin/codex", "/opt/homebrew/bin/codex"],
-        # exec: 대화 없이 한 번 실행. --full-auto: 작업 폴더 안에서 파일 쓰기 허용(샌드박스 workspace-write).
-        "args": ["exec", "--full-auto", "--skip-git-repo-check", "{instruction}"],
-        "test_args": ["exec", "--skip-git-repo-check", "{instruction}"],
+        # Q85: Codex에는 쓰기 권한을 주지 않는다. plan은 표준 출력에서 앱이 받아 저장한다.
+        "args": ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "{instruction}"],
+        "test_args": ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "{instruction}"],
         "install": [{"label": "npm", "cmd": "npm install -g @openai/codex"}],
         "login": "터미널에서 codex login (또는 codex 실행 후 ChatGPT 계정으로 로그인)",
         "docs": "https://github.com/openai/codex",
@@ -169,7 +171,7 @@ def status(root: str) -> dict:
         t = cfg["tools"][name]
         tools.append({"name": name, "label": spec["label"], "path": t.get("path"), "custom_path": t.get("custom_path"),
                       "found": bool(t.get("found")), "version": t.get("version"), "enabled": t.get("enabled", True),
-                      "tested": t.get("tested"), "test_ok": t.get("test_ok"), "args": t.get("args") or spec["args"],
+                      "tested": t.get("tested"), "test_ok": t.get("test_ok"), "args": spec["args"] if name == "codex" else (t.get("args") or spec["args"]),
                       "default_args": spec["args"], "install": spec["install"], "login": spec["login"], "docs": spec["docs"]})
     d = cfg.get("default")
     ready = bool(d and cfg["tools"].get(d, {}).get("found") and cfg["tools"][d].get("enabled", True))
@@ -189,7 +191,7 @@ def update_config(root: str, body: dict) -> dict:
             t["enabled"] = bool(patch["enabled"])
         if "custom_path" in patch:
             t["custom_path"] = (patch["custom_path"] or "").strip() or None
-        if "args" in patch:
+        if "args" in patch and name != "codex":
             a = patch["args"]
             t["args"] = [str(x) for x in a] if a else None
     save_config(root, cfg)
@@ -229,11 +231,53 @@ def _save_job(root: str, job: dict) -> None:
         json.dump(job, f, ensure_ascii=False, indent=2)
 
 
-def instruction_for(prompt_rel: str) -> str:
+def instruction_for(prompt_rel: str, readonly: bool = False) -> str:
     # cmd /c 를 거쳐도 깨지지 않도록 따옴표·&·|·<·>·%·^ 를 쓰지 않는다
-    return (f"Assets Manager 요청입니다. 파일 {prompt_rel} 를 읽고 그 지시를 그대로 수행하세요. "
-            "결과 파일은 지시에 적힌 위치에만 쓰고, 다른 파일은 고치거나 지우지 마세요. 사용자에게 질문하지 말고 끝까지 진행하세요. "
-            "라이브러리를 다루는 규칙과 형식은 assets-manager 스킬에 있습니다.")
+    common = (f"Assets Manager 요청입니다. 파일 {prompt_rel} 를 읽고 그 지시를 그대로 수행하세요. "
+              "사용자에게 질문하지 말고 끝까지 진행하세요. 라이브러리를 다루는 규칙과 형식은 assets-manager 스킬에 있습니다. ")
+    if readonly:
+        return (common + "Codex는 읽기 전용입니다. 파일에 쓰지 말고 최종 답변에 plan.yaml 전체를 yaml 코드 블록 하나로 출력하세요. "
+                "계획이 새 파일을 만들면 inline_files 매핑에 상대 경로와 그 파일의 전체 텍스트를 넣으세요.")
+    return common + "결과 파일은 지시에 적힌 위치에만 쓰고, 다른 파일은 고치거나 지우지 마세요."
+
+
+def _save_stdout_plan(root: str, output: str, expected: str, rid: str) -> bool:
+    """Codex 최종 답변의 plan.yaml만 요청 작업장에 저장한다. 로그의 다른 YAML은 무시한다."""
+    import yaml
+
+    for block in reversed(re.findall(r"```(?:yaml|yml)\s*\n(.*?)\n```", output, re.I | re.S)):
+        try:
+            plan = yaml.safe_load(block)
+        except yaml.YAMLError:
+            continue
+        if not isinstance(plan, dict) or str(plan.get("request")) != rid:
+            continue
+        target = os.path.abspath(os.path.join(root, expected))
+        inbox = os.path.abspath(os.path.join(root, "inbox", rid, "out"))
+        if os.path.commonpath((target, inbox)) != inbox or os.path.basename(target) != "plan.yaml":
+            return False
+        files = plan.get("inline_files") or {}
+        if not isinstance(files, dict):
+            return False
+        staged = []
+        for rel, content in files.items():
+            rel = str(rel).replace("\\", "/")
+            parts = PurePosixPath(rel).parts
+            if not parts or rel.startswith("/") or ":" in rel or ".." in parts or not rel.endswith((".md", ".meta.yaml")):
+                return False
+            path = os.path.abspath(os.path.join(inbox, *parts))
+            if os.path.commonpath((path, inbox)) != inbox or not isinstance(content, str) or len(content) > 2_000_000:
+                return False
+            staged.append((path, content))
+        os.makedirs(inbox, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(block.rstrip() + "\n")
+        for path, content in staged:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+        return True
+    return False
 
 
 def start(root: str, kind: str, prompt_path: str, ref: dict, tool: str | None = None, expect: list[str] | None = None) -> dict:
@@ -248,8 +292,13 @@ def start(root: str, kind: str, prompt_path: str, ref: dict, tool: str | None = 
     if not t.get("enabled", True):
         raise LookupError(f"{TOOLS[name]['label']}이(가) 꺼져 있습니다")
     rel = os.path.relpath(prompt_path, root).replace("\\", "/")
-    instr = instruction_for(rel)
-    args = [a.replace("{instruction}", instr).replace("{root}", root) for a in (t.get("args") or TOOLS[name]["args"])]
+    readonly = name == "codex"
+    if readonly and (len(expect or []) != 1 or not ref.get("request")):
+        raise ValueError("Codex 읽기 전용 실행은 plan.yaml을 돌려주는 요청에서만 지원합니다")
+    instr = instruction_for(rel, readonly)
+    # Q85: 저장된 사용자 인자에 --full-auto가 남아 있어도 Codex의 쓰기 권한은 열지 않는다.
+    spec_args = TOOLS[name]["args"] if readonly else (t.get("args") or TOOLS[name]["args"])
+    args = [a.replace("{instruction}", instr).replace("{root}", root) for a in spec_args]
     jid = time.strftime("job-%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
     job = {"id": jid, "tool": name, "tool_label": TOOLS[name]["label"], "kind": kind, "ref": ref, "prompt": rel,
            "instruction": instr, "state": "running", "started": time.strftime("%Y-%m-%dT%H:%M:%S"), "t0": time.time(),
@@ -278,7 +327,16 @@ def start(root: str, kind: str, prompt_path: str, ref: dict, tool: str | None = 
             job["error"] = str(e)
         with _lock:
             _procs.pop(jid, None)
-        found = all(os.path.exists(os.path.join(root, e)) for e in job["expect"]) if job["expect"] else None
+        if readonly and code == 0:
+            try:
+                with open(log_path, "rb") as log:
+                    output = _decode(log.read())
+                found = _save_stdout_plan(root, output, job["expect"][0], ref["request"])
+            except OSError as e:
+                job["error"] = str(e)
+                found = False
+        else:
+            found = all(os.path.exists(os.path.join(root, e)) for e in job["expect"]) if job["expect"] else None
         if job["state"] != "cancelled":
             job["state"] = "done" if code == 0 and found is not False else "failed"
             if code == 0 and found is False:
@@ -398,9 +456,26 @@ def run_for(lib, body: dict) -> dict:
         if not files:
             raise ValueError("등록할 파일이 없습니다")
         pkg = authoring.build(lib, files, tgt, note)
-        path = pkg["files"][0]
-        expect = None
-        ref = {"files": files}
+        if (body.get("tool") or load_config(lib.root).get("default")) == "codex":
+            req = freq.new_request(lib, None, kind="authoring", status="sent")
+            rid = req["id"]
+            for rel in files:
+                with open(lib.abspath(rel), "rb") as source:
+                    freq.add_src(lib, req, os.path.basename(rel), source.read())
+            freq._save(lib.root, req)
+            path = os.path.join(freq._rdir(lib.root, rid), "prompt-local.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(pkg["prompt"])
+                f.write(f"\n## Codex 읽기 전용 출력\n파일을 직접 쓰지 마세요. 요청 id는 `{rid}`입니다. "
+                        "최종 답변의 yaml 코드 블록에 `request`, `summary`, `create`(각 path와 reason), "
+                        "`inline_files`(각 상대 경로와 전체 .meta.yaml 텍스트)를 넣으세요. "
+                        "앱이 결과를 미리 보여 준 뒤 사용자가 적용합니다.\n")
+            expect = [f"{freq.INBOX}/{rid}/out/plan.yaml"]
+            ref = {"request": rid, "files": files}
+        else:
+            path = pkg["files"][0]
+            expect = None
+            ref = {"files": files}
     else:
         raise ValueError(f"알 수 없는 작업: {kind}")
     return start(lib.root, kind, path, ref, body.get("tool"), expect)

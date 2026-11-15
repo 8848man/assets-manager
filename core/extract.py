@@ -5,7 +5,7 @@
 
 이미지  크기, 비율, 주요 색 hex
 글      문단 수, 평균 문장 길이, 소제목·불릿·이모지 수, 존댓말 비율
-HTML/CSS 색, 폰트, 글자 크기, 여백, 모서리, 그림자, 애니메이션 시간과 이징 (브라우저 없이 텍스트에서 읽음)
+HTML/CSS 색, 폰트, 여백, 애니메이션 (기본은 정적 분석, 설정에서 켜면 Chromium 렌더링 결과도 추출)
 PDF     페이지 수와 크기, 폰트와 글자 크기 (PyMuPDF가 있으면)
 
 이 파일 하나만 있으면 동작한다(외부 AI의 코드 실행 환경에 그대로 올려도 됨). 필요한 패키지: Pillow, (선택) PyMuPDF
@@ -45,6 +45,16 @@ def extract(path: str) -> dict:
             out.update(extract_image(path))
         elif k == "web":
             out.update(extract_web(path))
+            if path.lower().endswith((".html", ".htm")):
+                try:
+                    import render_web
+                    root = os.environ.get("ASSETS_MANAGER_ROOT") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                    if render_web.status(root)["active"]:
+                        out["rendered"] = render_web.extract(path)
+                except ImportError:
+                    pass  # 외부 AI에 단독으로 올린 extract.py는 정적 추출만 쓴다.
+                except Exception as e:
+                    out["render_error"] = f"{type(e).__name__}: {e}"
         elif k == "document":
             out.update(extract_pdf(path))
         elif k == "writing":

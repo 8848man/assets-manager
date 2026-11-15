@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from engine import APP_DIR, Library  # noqa: E402
+from engine import APP_DIR, Library, RuleConflictError  # noqa: E402
 import authoring  # noqa: E402
 import extract as extractor  # noqa: E402
 import folder_requests as freq  # noqa: E402
@@ -32,12 +32,13 @@ import tidy  # noqa: E402
 import components  # noqa: E402
 import local_ai  # noqa: E402
 import embed  # noqa: E402
+import render_web  # noqa: E402
 import skills  # noqa: E402
 import console  # noqa: E402
 import terminal  # noqa: E402
 from engine import library_signature  # noqa: E402
 
-APP_VERSION = "0.15.0"  # UI(app.js)의 APP_VERSION과 같아야 함
+APP_VERSION = "0.16.0"  # UI(app.js)의 APP_VERSION과 같아야 함
 UI_DIR = os.path.join(APP_DIR, "ui")
 LOCK = threading.Lock()
 STATE: dict = {}
@@ -166,6 +167,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(local_ai.get_job(library().root, m.group(1)))
             if p == "/api/embed":  # Q83-A 뜻 검색(로컬 임베딩) 상태
                 return self._json(embed.status(STATE["root"]))
+            if p == "/api/render-web":  # Q88 선택형 Chromium 렌더링
+                return self._json(render_web.status(STATE["root"]))
             if p == "/api/changes":  # v3.8 파일 변경 감지 (UI가 창이 보일 때만 폴링)
                 return self._json({"sig": library_signature(STATE["root"])})
             if p == "/api/term":  # v3.8 터미널 세션 목록·사용 가능 여부
@@ -188,6 +191,8 @@ class Handler(BaseHTTPRequestHandler):
                 goal = None
                 if (q.get("goal") or "").startswith("skill:"):
                     goal = {"kind": "skill_to_principle", "skill": q["goal"][6:]}
+                elif q.get("goal") == "roles":
+                    goal = {"kind": "role_split"}
                 res = tidy.build(lib, q["node"], q.get("target") or None, goal)
                 res["prompt_path"] = os.path.join(lib.root, freq.INBOX, res["request"], "prompt.md")
                 return self._json(res)
@@ -216,6 +221,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(store.read_history(STATE["root"])[-200:])
             return self._json({"error": "unknown route"}, 404) if p.startswith("/api/") else \
                 self._file(safe_join(UI_DIR, p.lstrip("/")))
+        except RuleConflictError as e:
+            return self._json({"error": str(e), "conflict": {"key": e.key, "first": e.first, "second": e.second}}, 409)
         except Exception as e:
             traceback.print_exc()
             return self._json({"error": str(e)}, 500)
@@ -338,6 +345,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(embed.install(STATE["root"], library))
             if u.path == "/api/embed/config":
                 return self._json(embed.set_enabled(STATE["root"], bool(body.get("enabled"))))
+            if u.path == "/api/render-web/install":
+                return self._json(render_web.install(STATE["root"]))
+            if u.path == "/api/render-web/config":
+                return self._json(render_web.set_enabled(STATE["root"], bool(body.get("enabled"))))
             if u.path == "/api/local-ai/detect":
                 root = library().root
                 local_ai.detect(root)
@@ -430,6 +441,8 @@ class Handler(BaseHTTPRequestHandler):
                 library(sync=True, message=f"앱 기본값 업데이트: {', '.join(done)}")
                 return self._json({"upgraded": done})
             return self._json({"error": "unknown route"}, 404)
+        except RuleConflictError as e:
+            return self._json({"error": str(e), "conflict": {"key": e.key, "first": e.first, "second": e.second}}, 409)
         except Exception as e:
             traceback.print_exc()
             return self._json({"error": str(e)}, 500)

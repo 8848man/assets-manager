@@ -6,7 +6,7 @@ AI 탭에서 사용자가 연결한 Claude Code·Codex를 **진짜 대화형 터
 - 리소스: 패널을 열고 탭을 만들 때만 프로세스가 뜬다. 탭을 닫으면 종료. AI 탭은 기본 1개(MAX_AI).
   서버가 끝나면 모두 종료한다.
 - 세션 환경: 작업 폴더 = 라이브러리 루트, PATH 앞에 `.assets/bin`(`am` 명령), `AM_ACTOR=ai-tab`.
-  AI가 노드를 바꾸는 길은 `am` 명령이고, 라이브러리 `.claude/settings.json`이 규칙 파일 직접 편집을 막는다(P6).
+  Claude Code는 `am` 명령으로 노드를 바꾼다. Codex는 읽기 전용이어서 변경 계획을 출력한다(Q85).
 
 P3: 앱이 AI를 스스로 부르지 않는다. 사용자가 "+ AI" 탭을 눌러야 뜨고, 이후 입력도 사용자가 한다.
 """
@@ -257,6 +257,8 @@ def start(root: str, tool: str, cols: int = 100, rows: int = 30, cmd: list[str] 
             return {"error": f"{t['label']}을(를) 찾지 못했습니다. 설정 > 로컬 AI 도구에서 연결하세요.", "need": "connect"}
         label = t["label"]
         cmd = _resolve(t["path"])
+        if tool == "codex":
+            cmd += ["--sandbox", "read-only"]  # Q85: AI 탭에서도 am 쓰기는 차단된다.
         if not shutil.which(cmd[0]) and not os.path.isfile(cmd[0]):
             return {"error": f"실행 파일이 없습니다: {cmd[0]}", "need": "connect"}
     with LOCK:

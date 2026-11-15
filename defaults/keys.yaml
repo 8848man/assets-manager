@@ -9,6 +9,7 @@
 #   instruction     텍스트 값일 때의 문장 템플릿. {value}
 #   ref_instruction 레퍼런스 값일 때의 지시문 템플릿. {n} {file} {title}
 #   check           출력 전 자가 점검 문장 (프롬프트 끝 체크리스트에 들어감)
+#   value_type      single(기본) | list. list는 여러 원칙의 값을 순서대로 합치고 중복을 뺀다.
 #   image           (v5) true면 이미지 키: 원본(+similar_to로 묶인 원본)만 '## 이미지 생성' 단락에서 ImageGen 참조로 넘긴다.
 #                   ref_instruction·check·spec·구성 요소는 쓰지 않고, 텍스트 값은 '원본과 다르게 할 점'으로만 들어간다.
 #   precedence      이 키가 다른 키보다 우선하는 범위. [{over: 키, scope: 범위}]
@@ -20,7 +21,7 @@
 #
 # 구체적인 캐릭터나 화풍은 여기에 쓰지 마세요. 여기는 모든 세트가 공유합니다.
 # 캐릭터 묘사는 세트의 규칙 값이나 캐릭터 레퍼런스 노드에 둡니다.
-version: 5
+version: 6
 keys:
   language:
     label: 언어
@@ -65,6 +66,7 @@ keys:
     instruction: "{value}"
   forbidden:
     label: 금지 사항
+    value_type: list
     domain: common
     priority: required
     aliases: [금지, donts, 하지말것]
@@ -263,6 +265,7 @@ keys:
     check: "첫 화면을 만들기 전에 최소 디자인 시스템을 정했는가"
   open_questions:
     label: 제작 전 확인할 것
+    value_type: list
     domain: dev
     priority: required
     aliases: [미해결, 확인사항, blockers]

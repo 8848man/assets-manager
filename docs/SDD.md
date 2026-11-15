@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.15.0 · 기획서 v3.3(+14A~14J) 기준 · 2026-11-11
+앱 버전 0.16.0 · 기획서 v3.3(+14A~14K) 기준 · 2026-11-15
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -30,11 +30,15 @@
 
 보충 (v3.8):
 - **P3** — 콘솔 패널의 **AI 탭**은 사용자가 `+ AI`를 눌러 연 대화형 터미널이다. 앱은 입력을 보내지 않고 사용자 키 입력만 전달한다(자동 실행 없음).
-- **P6** — AI 탭의 Claude Code·Codex가 노드를 바꾸는 길은 **`am` 명령**뿐이다. `am`은 앱 함수로 키 단위로 쓰고, 바꾸기 전 보관(P5)·`am undo`·히스토리(`actor: ai-tab`)를 남긴다. 라이브러리 `.claude/settings.json`이 규칙 파일 직접 편집을 막는다(`deny`). Codex는 이런 권한 파일이 없어 루트 `AGENTS.md`의 규칙으로만 막는다. 구조를 크게 바꾸는 일은 `am tidy` → 앱 미리보기(P4).
+- **P6·Q85** — AI 탭의 Claude Code는 `am`으로 노드를 바꾼다. Codex는 읽기 전용 샌드박스에서 실행하므로 `am` 쓰기가 차단된다. 로컬 AI 버튼의 Codex 결과는 표준 출력의 `plan.yaml`과 `inline_files`를 앱이 요청 작업장에 저장하고, 미리보기 후 적용한다. 구조 변경은 기존 정리 미리보기(P4)를 거친다.
 
 보충 (v3.11, Q83-A):
 - **P3** — 뜻 검색의 로컬 임베딩 모델(ONNX, CPU)은 AI API가 아니라 계산 라이브러리다. 앱이 인터넷에 닿는 것은 설정의 **"뜻 검색 켜기" 버튼**을 눌렀을 때 한 번(pip 설치 + 리비전·sha256 고정 모델 내려받기)뿐이다.
 - **P2** — 뜻 검색이 켜져 있으면 `search`(→ 참고 예시)가 임베딩 점수를 쓴다. 스레드 1개·반올림·id 동점 정렬로 같은 모델·같은 폴더 상태에서는 같은 결과다. 켜짐/꺼짐은 이 PC의 상태(`.assets/embed/config.json`)이고, 꺼져 있으면 v3.10 검색과 글자 하나까지 같다.
+
+보충 (v3.12, Q86~Q88):
+- **Q86** — 한 계층에 붙은 두 부품 원칙의 목록 키(`value_type: list`)는 선언 순서대로 합치고 중복을 뺀다. 단일 키 값이 다르면 `RuleConflictError`로 조립을 중단하고 사용자에게 어느 값을 쓸지 묻는다. 상속 계층과 세트 자신의 덮어쓰기는 유지한다.
+- **P3·Q88** — HTML 렌더링용 Playwright·Chromium은 설정 버튼에서만 설치한다. 렌더링은 로컬 HTML을 오프라인·JavaScript 비활성 브라우저에서 읽고, 기능이 꺼져 있으면 기존 정적 추출을 쓴다.
 
 보충 (v3.10, Q82-A):
 - **이미지의 기준은 원본 파일이다.** 이미지 키는 스타일을 글로 넘기지 않는다: 키 지시문·엣지 `note`·레퍼런스 `spec`·`check`·구성 요소·우선순위 문장을 프롬프트에 넣지 않고, 원본(+`similar_to`로 묶인 원본)만 ImageGen 참조로 넘긴다. 사용자가 세트에 쓴 텍스트 값만 "원본과 다르게 할 점"으로 들어간다. 원본이 없으면 글로 대신하지 않고 빼며 경고한다. 덜어내기도 이미지를 글·컨택트 시트로 바꾸지 않는다.
@@ -85,7 +89,7 @@
 | `core/authoring.py` | 파일 하나·여럿을 AI가 메타로 등록하게 하는 작성 프롬프트 (미등록·기존 노드 다시 쓰기) | `build`, `render` | `extract` |
 | `core/components.py` | 구성 요소 분리(v3.9, Q81-A): 메타 `components` 정리(`normalize`), 잘라 낸 그림·구도 도식 캐시(`ensure`, `.assets/components/`), AI 요청(좌표 격자 사본 + 프롬프트) → 답 받기 → 미리보기(상자 수정 합치기) → 반영, 사람이 고친 요소 저장 | `normalize`, `ensure`, `crop_image`, `composition_image`, `grid_image`, `build`, `render_request`, `receive`, `preview`, `apply`, `save`, `open_request` | `folder_requests`, `store`, `tidy.parse_plan_text`, Pillow |
 | `core/tidy.py` | 하위 정리: 범위(scope)·결정적 진단(diagnose) → AI 요청 프롬프트 → plan(ops) 메모리 시뮬레이션 → 전·후 그래프·변경 이유·프롬프트 비교 → 적용 | `scope`, `diagnose`, `build`, `receive`, `simulate`, `preview`, `apply` | `folder_requests`, `store` |
-| `core/local_ai.py` | 로컬 AI 도구 찾기(PATH·기본 설치 위치·직접 경로)·버전·연결 시험·설정, 기능별 요청 준비(`run_for`: tidy·request·authoring → 에이전트용 prompt 파일), 백그라운드 실행·로그·취소·결과 파일 확인 | `detect`, `status`, `update_config`, `test`, `run_for`, `start`, `get_job`, `cancel` | `folder_requests`, `tidy`, `authoring`(지연 import) |
+| `core/local_ai.py` | 로컬 AI 도구 찾기·설정·실행. Codex는 읽기 전용, stdout plan을 요청 작업장에 저장(Q85) | `detect`, `status`, `update_config`, `test`, `run_for`, `start`, `_save_stdout_plan`, `get_job`, `cancel` | `folder_requests`, `tidy`, `authoring`(지연 import) |
 | `core/skills.py` | 스킬 연동: 도구 스킬 `assets-manager` 설치(시작 때), 세트 → 스킬 컴파일·내보내기(라이브러리 안/개인 폴더 × `.claude/skills`/`.agents/skills`)·고친 흔적 감지·제거, 설치된 스킬 읽기 → 그래프 노드 | `install_tool_skill`, `compile_set`, `status`, `export`, `remove`, `scan`, `graph_part` | `engine` |
 | `skills/assets-manager/` | 앱 번들 도구 스킬(SKILL.md + references/ + 설치 때 scripts/extract.py) | | |
 | `core/standards.py` | 작업 설명 → 맞는 세트 찾기(`find`, 결정적 점수: 제목·본문·규칙 값·붙은 스킬)·조립(`standard`, 맞는 것이 없으면 `global`) | `find`, `standard` | `engine`, `search.grams` |
@@ -93,15 +97,17 @@
 | `core/console.py` | `am` 노드 명령(v3.8): 보기(ls/show/find/standard), 바꾸기(inherit/use/unuse/set/unset/rename/new), undo, tidy 요청. 콘솔 탭·명령줄·AI 탭이 같은 명령을 쓴다 | `run`, `run_line`, `undo`, `HELP` | `engine`, `folder_requests`, `store`, `standards`, `tidy` |
 | `core/terminal.py` | AI 탭 터미널 세션(v3.8): Windows ConPTY(pywinpty)·POSIX pty, 출력 고리 버퍼, 긴 폴링 읽기, 크기 조절, 종료. `am` 실행 파일(`.assets/bin`), 라이브러리 `.claude/settings.json` 권한 합치기 | `start`, `Session`(`read`, `write`, `resize`, `close`), `close_all`, `write_shims`, `ensure_permissions` | `local_ai`(도구 경로), pywinpty(Windows) |
 | `core/export_cmd.py` | AI 대화창에 붙여넣는 내보내기 명령 (노드별: 요청 생성 / 일반: `@target`) | `build` | `folder_requests` |
-| `core/extract.py` | 결정적 값 추출 (이미지·글·HTML/CSS·PDF). 단독 실행 가능, 외부 AI 코드 실행 환경에도 그대로 올라감 | `extract`, `kind_of` | Pillow, (선택) PyMuPDF |
+| `core/extract.py` | 기본 정적 값 추출(이미지·글·HTML/CSS·PDF), 렌더링을 켜면 HTML 계산 스타일·애니메이션 추가 | `extract`, `kind_of` | Pillow, (선택) PyMuPDF·`render_web` |
+| `core/render_web.py` | 사용자 설정 버튼에서만 Playwright·Chromium 설치, 오프라인 HTML 렌더링 값 추출(Q88) | `status`, `install`, `set_enabled`, `extract` | playwright(선택) |
 | `core/search.py` | 결정적 키워드 검색 (단어 + 3글자 조각, 필드 가중치) + 뜻 검색이 켜져 있으면 임베딩 점수와 섞기(v3.11) | `search`, `grams`, `fields`, `_semantic`, `_blend` | `embed`(지연 import, 실패하면 키워드만) |
 | `core/embed.py` | 로컬 임베딩(v3.11, Q83-A): multilingual-e5-small q8 ONNX(리비전·sha256 고정), 조각 벡터 캐시, 켜기 작업(pip → 내려받기·검증 → 켜기 → 색인) | `status`, `active`, `set_enabled`, `install`, `index`, `scores`, `encode`, `set_encoder`(테스트용) | `rag.node_parts`, onnxruntime·tokenizers·numpy(선택) |
 | `core/rag.py` | `노드id#부분` 조각 JSONL 내보내기. 노드 → 조각은 `node_parts`(임베딩과 공용) | `node_parts`, `chunks`, `export_jsonl` | `engine` |
 | `core/mcp_server.py` | MCP 서버 (stdio JSON-RPC 2.0, 외부 패키지 없음) | `handle`, `call`, `TOOLS` | `engine`, `search` |
-| `ui/app.js` | 화면 전체 (빌드 단계 없음) | `loadGraph`, `select`, `render*`, `refreshPackage`, `handleDrop`, `openOutcome`, `confirmOutcome`, `copyExport` | Cytoscape·xterm.js 5.5 + addon-fit(번들, `ui/vendor/`), Tauri 전역(`window.__TAURI__`) |
+| `ui/app.js` | 화면 전체 (빌드 단계 없음), 역할별 원칙 나누기 버튼·렌더링 설정(Q75·Q88) | `loadGraph`, `select`, `render*`, `refreshPackage`, `handleDrop`, `openOutcome`, `confirmOutcome`, `copyExport` | Cytoscape·xterm.js 5.5 + addon-fit(번들, `ui/vendor/`), Tauri 전역(`window.__TAURI__`) |
+| `ui/compare.html` · `compare.js` | 두 프롬프트 버전의 결과와 골든 샘플을 출처를 가리고 비교(Q87) | `candidate`, `shuffle` | 브라우저 FileReader·Web Crypto |
 | `src-tauri/src/main.rs` | 셸, 사이드카 실행(`py` → `python` 순서), 종료 처리 | `spawn_server` | tauri 2, tauri-plugin-drag 2 |
 | `defaults/` | 앱 번들 기본값 (`keys.yaml`, `targets.yaml`, `defaults.md`) — 라이브러리에 없으면 복사 | | |
-| `tests/` | 단위·통합 테스트 102개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed` | |
+| `tests/` | 단위·통합 테스트 107개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
 
 ## 5. 데이터 모델
 
@@ -169,9 +175,9 @@ components:                   # v3.9 이미지만: 캐릭터·도형·구도로 
 relations: [{ type: variant_of | similar_to | pairs_with | supersedes | derived_from, target: <id> }]
 ```
 
-### 5.4 키 어휘 (`_defaults/keys.yaml`, version 5, 35개)
+### 5.4 키 어휘 (`_defaults/keys.yaml`, version 6, 35개)
 
-키마다 `label`, `domain`, `priority`(required/recommended/optional), `aliases`(동의어 경고), `instruction`, `ref_instruction`, `check`, `precedence`. 사용자 정의 키 허용(동의어면 경고). `domain: dev` 키 15개(설계 승인·문서 역할·충돌 처리 등)는 개발 착수 원칙 프리셋용. **조립은 키 단위 덮어쓰기라 한 세트에 붙는 원칙들은 서로 다른 키를 써야 한다**(같은 키 목록 병합은 미구현, 기획서 v3.4 열린 질문). 코드 안의 특수 키: `_example_<n>`(참고 예시, `priority: example` = 덜어내기 1순위).
+키마다 `label`, `domain`, `priority`(required/recommended/optional), `aliases`(동의어 경고), `instruction`, `ref_instruction`, `check`, `precedence`. 사용자 정의 키 허용(동의어면 경고). `domain: dev` 키 15개(설계 승인·문서 역할·충돌 처리 등)는 개발 착수 원칙 프리셋용. `value_type: list`인 키(`forbidden`, `open_questions`)는 여러 부품 원칙의 값을 합치고 중복을 뺀다. 나머지는 단일 키이며 같은 계층의 부품 원칙끼리 값이 다르면 조립을 멈춘다(Q86). 코드 안의 특수 키: `_example_<n>`(참고 예시, `priority: example` = 덜어내기 1순위).
 **이미지 키 (v5, Q82-A):** `image: true`인 키(`character_style`, `composition`, `shape_style`, `image_style`)는 `ref_instruction`·`check`를 두지 않는다. `precedence`는 첨부 순서에만 쓰고 문장은 만들지 않는다. 라이브러리 `keys.yaml`에 `image: true`가 하나도 없으면(v4 이하) `IMAGE_KEYS_DEFAULT`를 쓴다. `chart_style`·`golden_sample`은 이미지 키가 아니다(기존 지시문 그대로).
 **드롭 대상 (`targets.yaml` version 3):** `image_gen`(ImageGen으로 직접 그리는지; 기본값은 `chatgpt_web`만 true). 항목이 없으면(v2) `IMAGE_GEN_DEFAULT`로 판단.
 v4(v3.9): `shape_style`(도형, `image_style`보다 도형에 관해 우선) 추가, 최상위 `parts:` — 구성 요소 종류(character·shape·composition)마다 `label`, `key`(같은 측면의 규칙 키), `ref_instruction`(`{n} {file} {title}`), `check`(`{n}`). 라이브러리 keys.yaml에 `parts`가 없으면 `engine.PART_DEFAULTS`(같은 내용)를 쓴다. 렌더용 특수 모드 키: `<키>#<요소 이름>`(요소 하나의 attach/text/drop).
@@ -191,7 +197,7 @@ v4(v3.9): `shape_style`(도형, `image_style`보다 도형에 관해 우선) 추
 1. `linearize(id)`: 부모를 선언 순서대로 깊이 우선 펼치고 중복은 처음 위치만, 자신은 마지막. 순환이면 `CycleError`.
 1-1. `sources(id)` (v3.4): 계층마다 그 계층이 `uses`로 붙인 원칙(`components`, 재귀·중복 제거)을 **계층 바로 앞**에 끼운다. 결과: 계층 자신 > 그 계층의 원칙(뒤에 붙인 것 우선) > 윗 계층. `descendants`도 `sources` 기준(원칙을 쓰는 세트가 영향 범위).
 1-2. `skills_of(id)` (v3.7): `sources` 순서대로 각 노드의 `uses` 중 스킬 노드를 모은다(중복은 처음 위치). 전역 원칙에 붙인 스킬은 상속으로 모든 세트에 들어간다. `descendants(스킬)`은 그 스킬을 받는 모든 규칙 노드.
-2. 그 순서로 규칙을 키 단위 덮어쓰기. 키마다 `source`, `overridden` 기록. `kind: defaults`에서 온 값은 `from_defaults`.
+2. 그 순서로 규칙을 조립한다. 같은 계층에 붙은 부품 원칙끼리 `value_type: list` 키가 겹치면 쉼표 구분 문자열 또는 YAML 목록의 항목을 순서대로 합치고 중복 제거한다. 단일 키 값이 다르면 `RuleConflictError`로 중단한다. 그 밖의 상속 계층·세트 규칙은 뒤가 우선한다. 키마다 `source`, `overridden` 기록. `kind: defaults`에서 온 값은 `from_defaults`.
 3. 레퍼런스 값은 `ref_*` 필드와 `status`(ok / text_only / empty / missing)를 채운다. v3.9 `_attach_components`: 원본에 요소가 있으면 `e.components`(요소별 `abs`, `spec`, `check`, `status`, `pkey`=짝 키, 구도 `legend`)를 붙이고 `components.ensure`로 그림 캐시를 맞춘다. 값이 `ref:<id>#<요소>`면 항목 자체가 그 요소(`ref_file`=잘라 낸 그림, `spec`·`check`=요소 것, `part_kind`, `legend`), 없는 요소면 `missing` + 검증 오류.
 4. 우선순위: `keys.yaml`의 `precedence` 기본값 → 상속 순서대로 세트의 `precedence`가 같은 키 쌍을 덮어씀. 둘 다 있는 쌍만 활성. 레퍼런스 첨부 순서는 "우선하는 쪽 먼저".
 5. 텍스트 항목은 키 어휘 순서, 레퍼런스 항목은 우선순위 순서로 정렬.
@@ -249,12 +255,13 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 - `preview`: 전·후 `subgraph`, 전·후 진단, 세트마다 `render` 결과 비교(`same`, `changed_keys`, unified diff). 체크 해제 목록(`selected`)으로 다시 시뮬레이션.
 - `apply`: `backup_sync` → 바뀐 규칙 노드 프런트매터 다시 쓰기(키 순서 유지)·새 노드 파일·레퍼런스 메타의 연결 → 빈 노드는 `store.delete_node`(휴지통) → 히스토리 `kind: tidy`.
 - zip으로 받은 정리 답(`plan.request`가 tidy 요청)은 `drops.stage`가 `case: "tidy"`로 돌려 UI가 정리 창을 연다.
+- 역할별로 나누기(Q75): 세트 상세 버튼은 `goal=roles`로 같은 정리 요청을 만든다. AI에게 세트의 규칙을 역할별 부품 원칙으로 옮길 `create_rule`·`move_rule`·`set_uses` 계획을 요구한다. 기존 전·후 그래프와 프롬프트 비교를 그대로 사용한다.
 
 ### 6.8 로컬 AI 실행 (`local_ai`, Q76-B)
-- 도구 정의 `TOOLS`: `claude`(Claude Code: `-p {instruction} --permission-mode acceptEdits --allowedTools Read,Write,Edit,Glob,Grep,Bash(python:*)… --max-turns 60`), `codex`(Codex CLI: `exec --full-auto --skip-git-repo-check {instruction}`). 인자는 설정에서 바꿀 수 있다. Windows의 `.cmd`는 `cmd /c`로 감싼다.
+- 도구 정의 `TOOLS`: `claude`(Claude Code: `-p {instruction} --permission-mode acceptEdits --allowedTools Read,Write,Edit,Glob,Grep,Bash(python:*)… --max-turns 60`), `codex`(Codex CLI: `exec --sandbox read-only --skip-git-repo-check {instruction}`). Claude 인자는 설정에서 바꿀 수 있다. Codex 인자는 읽기 전용으로 고정한다. Windows의 `.cmd`는 `cmd /c`로 감싼다.
 - 지시(`instruction_for`)는 한 줄: "파일 `<prompt 상대 경로>` 를 읽고 그대로 수행, 지시된 위치에만 쓰기, 질문하지 말고 끝까지". 따옴표·`&|<>%^` 없음(cmd 안전). 작업 폴더는 라이브러리 루트(루트 AGENTS.md·CLAUDE.md의 쓰기 규칙이 함께 읽힘).
-- `run_for`: tidy → 에이전트용 `tidy.render`를 `inbox/<rid>/prompt-local.md`에, 기대 결과 `inbox/<rid>/out/plan.yaml` / request → `folder_requests.package(에이전트 대상)`의 `package/prompt.md`, 기대 결과 같은 plan / authoring → `authoring.build(에이전트 대상)`, 메타는 원본 옆.
-- `start`: 스레드에서 `Popen`, 출력은 `.assets/local-ai/jobs/<job>.log`, 상태는 `<job>.json`(running → done | failed | cancelled). 자식 프로세스에는 `PYTHONIOENCODING=utf-8`·`PYTHONUTF8=1`을 주고, 출력은 UTF-8로 읽되 아니면 이 PC 기본 인코딩(Windows 한국어 cp949)으로 읽는다(`_decode`). 20분 제한. 종료 코드 0이어도 기대 결과 파일이 없으면 failed. 취소는 Windows `taskkill /T /F`.
+- `run_for`: tidy → 에이전트용 `tidy.render`를 `inbox/<rid>/prompt-local.md`에, 기대 결과 `inbox/<rid>/out/plan.yaml` / request → `folder_requests.package(에이전트 대상)`의 `package/prompt.md`, 기대 결과 같은 plan / authoring → Claude는 `authoring.build(에이전트 대상)`의 메타를 원본 옆에 쓰고, Codex는 새 요청의 `plan.yaml`을 표준 출력으로 돌려 미리보기로 보낸다.
+- `start`: 스레드에서 `Popen`, 출력은 `.assets/local-ai/jobs/<job>.log`, 상태는 `<job>.json`(running → done | failed | cancelled). 자식 프로세스에는 `PYTHONIOENCODING=utf-8`·`PYTHONUTF8=1`을 주고, 출력은 UTF-8로 읽되 아니면 이 PC 기본 인코딩(Windows 한국어 cp949)으로 읽는다(`_decode`). Codex는 최종 출력의 YAML 코드 블록에서 같은 요청 id의 plan을 찾고, `inline_files`는 요청 `out/` 안의 `.md`·`.meta.yaml`에만 저장한다. 20분 제한. 종료 코드 0이어도 기대 결과가 없으면 failed. 취소는 Windows `taskkill /T /F`.
 - 흐름: 기능 버튼 → `ensureLocalAI`(준비 안 됐으면 설정 창을 안내 모드로) → `runLocal` → 오른쪽 아래 진행 표시 → 끝나면 기존 미리보기(정리 창·결과 창)를 연다. 반영은 언제나 사용자가 한다.
 
 ### 6.9 스킬 연동 (`skills`, Q77-A)
@@ -288,6 +295,10 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 - `apply(rid, selected)`: 기존 순서 유지하며 같은 이름은 바꾸고 새 것은 뒤에 붙임 → `backup_sync` → 메타 다시 쓰기(다른 필드 보존, 짧은 목록은 한 줄 표기) → 요청 applied → 히스토리 `kind: components`.
 - `save(nid, comps)`: 상세 화면의 상자 고치기·빼기. 사람이 한 변경이라 바로 반영(P4), 쓰기 전 보관(P5), 형식 오류는 거부.
 
+### 6.13 블라인드 비교와 HTML 렌더링 (Q87·Q88)
+- `ui/compare.html`·`compare.js`: 사용자가 같은 세트·작업의 두 프롬프트 버전 결과(텍스트 또는 이미지)와 골든 샘플을 넣는다. 화면에서 세 결과의 출처를 무작위 순서로 가리고 선택 후 공개한다. 결과는 JSON으로 내려받는다. 앱은 AI를 자동 호출하거나 결과를 서버에 전송하지 않는다.
+- `render_web.status/install/set_enabled`: Playwright·Chromium은 설정 버튼에서만 내려받는다. 켜져 있으면 `extract.extract`가 정적 HTML 값에 `rendered`(1280×800 오프라인 브라우저의 계산 스타일·애니메이션)를 더한다. 브라우저가 없거나 꺼져 있으면 정적 값만 돌려준다. 오류는 `render_error`로 돌려 등록 자체는 계속한다.
+
 ## 7. 폴더 구조와 수명
 
 | 경로 | 성격 | Git | 로더가 읽나 |
@@ -306,6 +317,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 | `.assets/components/<id>/` | 구성 요소 캐시: `<id>.<요소>.png`(잘라 낸 그림·구도 도식) + `stamp.txt` (원본·요소가 같으면 다시 그리지 않음, 지우면 다시 그림) | 아니오 | 아니오 |
 | `.assets/console/undo.jsonl` | `am` 되돌리기 스택 (바뀌기 전 파일 내용) | 아니오 | 아니오 |
 | `.assets/embed/config.json` · `vectors.json` | 뜻 검색 켜짐 여부(기기별) · 조각 벡터 캐시 (지우면 다시 계산) (v3.11) | 아니오 | 아니오 |
+| `.assets/render/config.json` | 선택형 HTML 렌더링 켜짐 여부(기기별). Chromium은 Playwright 사용자 캐시에 설치 | 아니오 | 아니오 |
 | `%LOCALAPPDATA%/assets-manager/models/<모델 키>/` (`AM_MODEL_DIR`로 바꿀 수 있음) | 라이브러리 **밖**: 임베딩 모델 파일 + `verified`. 여러 라이브러리가 함께 씀 | 아니오 | 아니오 |
 | `.assets/bin/am` `am.cmd` | `am` 실행 파일 (서버 시작 때 이 PC의 Python·경로로 다시 씀) | 아니오 | 아니오 |
 | `.claude/settings.json` | 라이브러리에서 뜨는 Claude Code 권한: `am` 허용, 규칙 파일 직접 편집 금지 (앱은 빠진 항목만 더함) | 예 | 아니오 |
@@ -338,7 +350,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 | POST `/api/stage/<sid>/commit` {option, params} · `/discard` | 실행·취소 |
 | POST `/api/request/<rid>/attach` {paths \| uploads} · `/assign` {path, file} | 원본 짝 맞추기 |
 | POST `/api/request/<rid>/apply` {selected} · `/discard` | 결과 적용·버리기 |
-| GET `/api/tidy?node&target[&goal=skill:<id>]` · `/api/tidy/open?node` | 하위 정리 요청 만들기(진단·프롬프트·현재 그래프) · 이 노드의 열린 정리 요청 |
+| GET `/api/tidy?node&target[&goal=skill:<id>\|roles]` · `/api/tidy/open?node` | 하위 정리 또는 역할별 분리 요청 만들기(진단·프롬프트·현재 그래프) · 이 노드의 열린 정리 요청 |
 | POST `/api/tidy/<rid>/receive` {text} · `/preview` {selected} · `/apply` {selected} | AI 답 붙여넣기 → 미리보기 → 반영 |
 | GET `/api/components/request?node&target` · `/api/components/open?node` | 구성 요소 분리 요청 만들기(프롬프트·파일 3개·격자 사본·드래그 아이콘) · 이 노드의 열린 요청(답이 있으면 미리보기 포함) (v3.9) |
 | POST `/api/components/<rid>/receive` {text} · `/preview` {edits} · `/apply` {selected} | AI 답 붙여넣기 → 미리보기(상자 수정 합치기) → 반영 |
@@ -346,6 +358,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 | POST `/api/request/<rid>/target` {node} | 결과를 둘 노드 지정(빈 공간에 놓은 경우) → 미리보기 |
 | GET `/api/embed` | 뜻 검색 상태 `{enabled, deps, model, active, model_name, model_dir, download_mb, vectors, job}` (v3.11) |
 | POST `/api/embed/install` · `/api/embed/config` {enabled} | 켜기(내려받기·색인, 백그라운드, 다시 누르면 다시 색인) · 끄기/켜기만 |
+| GET `/api/render-web` · POST `/api/render-web/install` · `/api/render-web/config` {enabled} | 선택형 Chromium 상태·설정 버튼 설치·켜기/끄기 |
 | GET `/api/local-ai` · `/api/local-ai/job/<jid>` | 로컬 AI 도구 상태(처음이면 찾기)·`ready` · 작업 상태와 로그 끝부분 |
 | POST `/api/local-ai/detect` · `/config` {default, tools{name:{enabled, custom_path, args}}} · `/test` {tool} | 다시 찾기 · 설정 · 연결 시험(짧은 질문, 최대 3분) |
 | POST `/api/local-ai/run` {kind: tidy\|components\|request\|authoring, request?, files?, note?, tool?} · `/job/<jid>/cancel` | 실행(연결 안 됐으면 409 `needs_setup`) · 취소 |
@@ -391,14 +404,17 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 
 구성 요소 답 `plan.yaml`: `request`, `node`, `summary`, `components[{name, part, title, box, regions?, flow?, spec, check}]` (형식: `skills/assets-manager/references/components-format.md`).
 `plan.yaml`: `request?`, `summary`, `create[{path, reason}]`, `update[{node | "@target", set_rules{}, reason}]`, `relations[{from, type, to, reason}]`, `missing[]`.
+Codex 읽기 전용 실행(Q85)은 최종 표준 출력의 YAML 코드 블록에 같은 요청 id의 `plan.yaml`을 돌려준다. 새 파일은 `inline_files: {상대 경로: 전체 텍스트}`에 담고 앱이 `inbox/<rid>/out/`에 저장한다. 저장 경로는 `.md`·`.meta.yaml`로 제한하고 미리보기 후 적용한다.
 
 ## 11. UI 구조 (`ui/app.js`)
 
 - 설정 창(`#settings-dialog`, 상단 `설정` 버튼·초록 점 = 연결됨): `openSettings({reason, then})` — 도구 카드(찾음/버전/기본 선택/사용/연결 시험/설치 명령 복사/고급: 직접 경로·실행 인자). `reason`이 있으면 위에 '이 기능은 AI가 필요합니다' 안내와 단계, 연결되면 `계속하기`로 원래 작업을 이어 실행. 진행 표시 `#job-bar`(`runLocal`·`pollJob`·`renderJobs`: 경과 시간, 로그 보기, 취소, 실패 사유).
 - 설정 창의 뜻 검색 칸(v3.11, `loadEmbedBox`, `#embed-box`): 켜짐/꺼짐, 모델·패키지·색인 조각 수, `내려받고 켜기`/`켜기`·`끄기`·`다시 색인`. 작업 중에는 창이 열려 있고 보일 때만 1.5초마다 상태를 다시 읽는다.
+- 설정 창의 HTML 렌더링 칸(Q88, `loadRenderWebBox`): 상태, 선택형 Chromium 설치·켜기·끄기. 작업 중에는 창이 보일 때만 상태를 다시 읽는다.
 - 스킬: 그래프의 태그 모양 노드(보라 = 라이브러리 안, 파랑 = 개인 폴더, 이중 테두리 = 도구 스킬, 점선 = 갱신 필요, 빨강 = 직접 고침), 상단 `스킬` 토글. 세트 상세의 `#skill-box`(`loadSkillBox`: 범위×도구 상태 표, 내보내기·다시 내보내기·제거, 충돌 diff와 덮어쓰기, SKILL.md 미리보기), 스킬 상세 `renderSkill`.
 - 라이브러리 스킬: 초록 태그 노드(`libskill`). 상세 `renderLibSkill`(설명, 붙인 노드·떼기, 상속으로 받는 세트, 붙이기+범위 안내 `scopeHint`, 원칙으로 풀기, 파일, 가져온 곳·되살리기). 규칙 상세의 `skillsHtml`(함께 쓰는 스킬 + 붙이기). 설치된 스킬 상세의 '앱으로 가져오기'(붙일 노드, 원래 스킬 끄기). 설정 창 `callerHtml`(개인 스킬·전역 지침 설치/제거, 직접 부르는 명령).
 - 하위 정리 창(`#tidy-dialog`): `openTidy` → (열린 요청이 있으면 이어서) 1 진단 · 2 요청 복사 · 3 답 붙여넣기 → `showTidyPreview`(왜, 전·후 미니 그래프 `miniGraph`, 최종 프롬프트 비교, 변경 체크) → `applyTidy` → `arrangeTidy`(세트는 깊이 순 아래로, 원칙은 오른쪽 줄, 레퍼런스는 왼쪽 줄로 다시 배치하고 저장).
+- 세트 상세의 `역할별로 나누기`(Q75)는 같은 정리 창을 `goal=roles`로 열어 역할별 원칙 분리안을 받고 동일한 미리보기·적용을 사용한다. 상단 `블라인드 비교`(Q87)는 별도 `compare.html`에서 두 버전과 골든 샘플을 출처를 가리고 비교한다.
 
 - 구성 요소(v3.9): 이미지 레퍼런스 상세의 `compsHtml`(요소 카드: 잘라 낸 그림, 종류, 설명, 점검, `ref:<id>#<요소>` 복사, 빼기 / `AI로 나누기`·`상자 고치기`). 창 `#comp-dialog`: `openComponents`(열린 요청에 답이 있으면 바로 미리보기) → `renderCompRequest`(대상 선택, 로컬 AI, 끌어 놓기 손잡이 = 프롬프트+원본+격자 사본, 요청 복사, 답 붙여넣기) → `showCompPreview`(상자 편집기 `boxEditorHtml`/`bindBoxEditor`: 끌어 옮기기·모서리로 크기, 놓으면 바뀐 것만 `preview`에 보내 다시 그림 / 요소 카드 체크 → 반영). `editComponents`는 같은 편집기로 반영된 요소를 고쳐 바로 저장. 세트 규칙 표의 레퍼런스 칸에 `+ 요소 N개`. 놓은 zip이 분리 답이면 `case: components`로 미리보기를 연다.
 - 콘솔 패널(`#console-panel`, 상단 `콘솔` 버튼·Ctrl+\`): 아래쪽, 높이 끌어 조절(localStorage `am.consoleH`). 처음 열 때 xterm을 만든다(`conInit`). **콘솔 탭**은 앱 안 줄 편집기(`conConsoleInput`: ←→ Home End, ↑↓ 기록 200줄, Tab 명령·노드 id 완성, Ctrl+C·L·U, 여러 줄 붙여넣기, 한글 폭 2칸 계산) → `POST /api/console` → 출력 → 바뀐 노드가 있으면 `conRefresh`. **AI 탭**(`+ AI` 선택 → `conAddAI`)은 xterm ↔ `/api/term/*`(입력 8ms 모아 보내기, 긴 폴링 `conReadLoop`, 창 크기 `fit`). 탭 × = 프로세스 종료. 스크롤백 5000줄.
@@ -423,19 +439,21 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 | `test_requests.py` | 폴더 요청: 준비, 시트·묶음, 결과 미리보기·적용, 덮어쓰기, 잘못된 plan |
 | `test_v33.py` | 검색, 참고 예시·덜어내기, stage 선택지, commit(산출물·원본·변형·골든·승격·되돌리기), 요청 없는 zip·`@target`·짝 맞추기, 내보내기 명령, RAG, MCP(stdio 실제 프로세스), 노드 종류별 자동 연결, 개발 착수 프리셋 조립, `uses` 조립 순서, 하위 정리 왕복(프롬프트 동일·쓰이는 노드 휴지통 거부·값 변경 감지), 승인 게이트·작업 대기 끝 단락 |
 
-| `test_local_ai.py` | 로컬 AI 도구: 찾기(직접 경로)·버전·연결 시험, 연결 안 됐을 때 오류, 실행 → 결과 파일 → 정리 미리보기, 결과 파일이 없으면 failed. 가짜 도구(POSIX는 shebang 스크립트, Windows는 `.cmd`로 감쌈) |
+| `test_local_ai.py` | 로컬 AI 도구: 찾기(직접 경로)·버전·연결 시험, 실행 → 결과 파일 → 정리 미리보기, 결과 파일이 없으면 failed, Codex 읽기 전용 인자·표준 출력 plan과 인라인 파일의 요청 경로 검사. 가짜 도구 사용 |
 | `test_skills.py` | 도구 스킬 설치(다시 해도 같음), 세트 → 스킬 컴파일(이식 가능한 프런트매터·결정성), 내보내기·고친 흔적 감지·제거, 다른 스킬은 덮어쓰지 않고 읽기만 |
 | `test_standards.py` | 스킬 노드 보관·붙이기·조립, 표준 찾기·`cli.py standard`, 설치된 스킬 가져오기(원래 끄기), 스킬 폴더를 노드에 놓기, AI가 부르게 하기(개인 스킬·전역 지침 줄), 원칙으로 풀기 요청, 스킬 휴지통(폴더째) |
 | `test_components.py` | 구성 요소(이미지가 아닌 키 `chart_style`로): 메타 정리·경고, 원본 + 요소 첨부 렌더·파일 생성, 결정성(같은 PNG·프롬프트), 이미지 키는 요소 없이 원본만, `ref:<id>#<요소>`·없는 요소 오류, 덜어내기(요소 먼저 글로), 요소 없으면 프롬프트 그대로, 요청 왕복(격자·붙여넣기·상자 수정·반영·다른 필드 보존), 기존 요소 바꾸기 기본 꺼짐·에이전트 경로, zip → `case: components`, 사람 수정 저장, 스킬 내보내기에 요소 포함 |
 | `test_v310.py` | 이미지 키(Q82-A): 규칙 단락·spec·ref check·우선순위 문장 없음, ImageGen판(chatgpt_web)·요청서판(claude_desktop·codex), 비슷한 원본 양방향·중복·원본 없는 것 제외, 원본 없음 경고, 덜어내기(비슷한 원본 먼저, 글·시트 변환 없음), 이미지 키 없으면 단락 없음, 옛 기본값 대비·사용자 `image: true` 키, 결정성 |
 | `test_embed.py` | 뜻 검색(가짜 인코더): 꺼져 있으면 키워드 검색 그대로·인코더 안 부름, 켜면 낱말이 안 겹쳐도 뜻으로 찾고 관계없는 것은 뺌·결정성, 벡터 캐시·바뀐 조각만 다시 계산·`index`의 정리, 참고 예시에 반영, 인코더 오류 시 키워드로, 모델 없으면 켜도 키워드 |
 | `test_console.py` | `am` set·unset·undo(본문 보존), use·inherit·순환 거부, new·rename·기록의 actor, 오류, 명령줄 연결(`cli.py set`·`standard`), 파일 서명, `.claude/settings.json` 합치기(사용자 항목 유지·깨진 JSON 보존), `am` 실행 파일, POSIX pty 세션(환경·한글 입출력·1개 제한·종료) |
+| `test_render_web.py` | Chromium 렌더링은 기본 꺼짐이고 설정에서 켜고 끌 수 있음(브라우저 준비 상태는 모의) |
 
 UI는 자동 테스트가 없다. 변경 후 브라우저 모드(`start.bat browser`)로 확인한다.
 
 ## 13. 실행과 배포
 
 - 뜻 검색(선택, v3.11): `requirements.txt`에 넣지 않는다. 설정의 버튼이 서버를 돌리는 Python에 `onnxruntime`·`tokenizers`를 설치하고 모델(약 135MB)을 사용자 캐시 폴더에 받는다.
+- HTML 렌더링(선택, Q88): `requirements.txt`에 넣지 않는다. 설정 버튼에서만 `playwright`와 Chromium을 설치한다. 실제 브라우저 추출은 이 PC에서 선택 기능을 켠 경우에만 실행한다.
 - `start.bat`(라이브러리 루트): Python 확인 → 패키지 설치(최초) → (선택) AI 탭용 `pywinpty` 설치, 실패해도 계속 → 8765 포트의 이전 서버 정리 → 빌드된 exe / `npm run dev` / 브라우저 모드. 메시지는 영문만(cmd 한글 파싱 문제).
 - 앱 코드 이력: `app/`에서 `git log`. 코드를 바꾼 작업은 끝날 때 `app/`에서 커밋한다(라이브러리 데이터의 자동 기록과 별개).
 - 서버 시작 시 포트가 막혀 있으면 이전 서버에 `/api/shutdown`을 요청하고 인계받는다.
