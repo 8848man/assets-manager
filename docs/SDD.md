@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.16.1 · 기획서 v3.3(+14A~14K) 기준 · 2026-11-16
+앱 버전 0.16.2 · 기획서 v3.3(+14A~14K) 기준 · 2026-11-16
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -426,7 +426,7 @@ Codex 읽기 전용 실행(Q85)은 최종 표준 출력의 YAML 코드 블록에
 - 드롭: `setupInbound`(Tauri `tauri://drag-*` 이벤트 또는 HTML5) → `handleDrop` → `/api/stage` → `openOutcome` → `confirmOutcome` → `/api/stage/<sid>/commit`. 결과 확인 중 놓은 파일은 `attach`로 간다.
 - 내보내기 드래그: Tauri는 `plugin:drag|start_drag`(파일 여러 개), 브라우저는 텍스트 드래그. 놓으면 `/api/history`에 기록.
 - `APP_VERSION`은 `server.py`와 `app.js`에서 같아야 한다(다르면 UI가 경고).
-- API 주소 `API`(0.16.1): 페이지가 `http://127.0.0.1` 또는 `http://localhost`에서 열렸으면(서버가 UI를 직접 내줌, 포트 무관) 같은 출처 `""`, 그 밖(Tauri 창 `tauri.localhost` 등)이면 사이드카 `http://127.0.0.1:8765`. `server.py --port`로 다른 포트에 띄운 서버도 브라우저 모드로 열 수 있다.
+- API 주소 `API`(0.16.2): Tauri 창이면(`window.__TAURI__`: 빌드된 exe의 `tauri.localhost`, 개발 모드 `npm run dev`의 개발 서버 `127.0.0.1:1430` 모두) 사이드카 `http://127.0.0.1:8765`, 그 밖(서버가 UI를 직접 내주는 브라우저 모드)은 같은 출처 `""`. `server.py --port`로 다른 포트에 띄운 서버도 브라우저 모드로 열 수 있다. (0.16.1은 호스트 이름으로 판단해 개발 모드 창이 1430으로 요청하는 문제가 있었다)
 
 ## 12. 테스트
 
