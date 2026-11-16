@@ -28,7 +28,7 @@ Python 사이드카(표준 라이브러리 HTTP 서버 + PyYAML + Pillow) · Tau
   app/                ← 이 저장소
 ```
 
-위치를 바꾸려면 환경 변수 `ASSETS_ROOT`로 라이브러리 폴더를 지정하세요. 아래 안내의 `D:\projects\assets`는 작성자 환경의 라이브러리 경로 예시입니다.
+데스크톱 모드에서는 환경 변수 `ASSETS_ROOT`로 라이브러리 폴더를 바꿀 수 있습니다. 아래 안내의 `D:\projects\assets`는 작성자 환경의 라이브러리 경로 예시입니다.
 
 ## 구성
 
