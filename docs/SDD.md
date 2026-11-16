@@ -458,7 +458,7 @@ UI는 자동 테스트가 없다. 변경 후 브라우저 모드(`start.bat brow
 - 뜻 검색(선택, v3.11): `requirements.txt`에 넣지 않는다. 설정의 버튼이 서버를 돌리는 Python에 `onnxruntime`·`tokenizers`를 설치하고 모델(약 135MB)을 사용자 캐시 폴더에 받는다.
 - HTML 렌더링(선택, Q88): `requirements.txt`에 넣지 않는다. 설정 버튼에서만 `playwright`와 Chromium을 설치한다. 실제 브라우저 추출은 이 PC에서 선택 기능을 켠 경우에만 실행한다.
 - `start.bat`(라이브러리 루트): Python 확인 → 패키지 설치(최초) → (선택) AI 탭용 `pywinpty` 설치, 실패해도 계속 → 8765 포트의 이전 서버 정리 → 빌드된 exe / `npm run dev` / 브라우저 모드. 메시지는 영문만(cmd 한글 파싱 문제).
-- 앱 코드 이력: `app/`에서 `git log`. 코드를 바꾼 작업은 끝날 때 `app/`에서 커밋한다(라이브러리 데이터의 자동 기록과 별개).
+- 앱 코드 이력: `app/`에서 `git log`. 코드를 바꾼 작업은 끝날 때 `app/`에서 커밋한다(라이브러리 데이터의 자동 기록과 별개). `main`에 직접 push하지 않고 작업 브랜치 → PR → 사용자 머지 순서로 올린다(`AGENTS.md` "브랜치와 PR").
 - 서버 시작 시 포트가 막혀 있으면 이전 서버에 `/api/shutdown`을 요청하고 인계받는다.
 - exe는 빌드한 PC의 `app/` 경로를 기준으로 사이드카를 찾는다(`CARGO_MANIFEST_DIR`). 다른 PC 배포는 3단계.
 
