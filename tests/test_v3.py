@@ -169,6 +169,38 @@ class V3Test(unittest.TestCase):
         subject, body = store.commit_message(many)
         self.assertEqual(subject, "규칙 삭제 · 규칙 이름 변경: p0, p1, p2 외 3개")
         self.assertIn("이름 변경 sets/a.md → sets/b.md", body)
+        subject, body = store.commit_message([("M", "sets/a.md", None)], checked_at="콘솔 명령 전 확인")
+        self.assertEqual(subject, "규칙 수정: a")  # 동작 전 쓸어 담기에는 앱 동작 이름이 붙지 않는다
+        self.assertTrue(body.endswith("출처: 폴더 변경 감지 (콘솔 명령 전 확인)"))
+        subject, _ = store.commit_message([("M", ".gitignore", None), ("M", ".claude/settings.json", None)])
+        self.assertEqual(subject, "설정 수정: .gitignore, settings")
+
+    @unittest.skipUnless(shutil.which("git"), "git 없음")
+    def test_root_docs_are_not_auto_committed(self):
+        """기획서·AGENTS.md 같은 '기타' 파일은 자동 커밋에서 빼고 사람이 직접 커밋한다 (ISSUE-032·033)."""
+        write(self.root, "AGENTS.md", "# 안내\n")
+        rule(self.root, "sets/a.md", "a", None, "  tone: x\n")
+        r = store.backup_sync(self.lib(), checked_at="앱 시작 때 확인")["git"]
+        self.assertTrue(r["committed"], r)
+        self.assertIn("AGENTS.md", r["skipped"])
+        tracked = subprocess.run(["git", "ls-files"], cwd=self.root, capture_output=True, text=True,
+                                 encoding="utf-8").stdout.splitlines()
+        self.assertIn("sets/a.md", tracked)
+        self.assertIn(".gitignore", tracked)  # 앱이 관리하는 설정은 커밋
+        self.assertNotIn("AGENTS.md", tracked)
+        log = subprocess.run(["git", "log", "-1", "--format=%s%n%b"], cwd=self.root, capture_output=True, text=True,
+                             encoding="utf-8").stdout
+        self.assertNotIn("AGENTS.md", log)
+        self.assertIn("출처: 폴더 변경 감지 (앱 시작 때 확인)", log)
+        # 문서만 바뀌면 커밋하지 않고, 파일은 그대로 남는다 (HEAD가 있는 경우의 unstage)
+        write(self.root, "AGENTS.md", "# 안내 2\n")
+        r = store.backup_sync(self.lib())["git"]
+        self.assertFalse(r["committed"])
+        self.assertEqual(r["skipped"], ["AGENTS.md"])
+        self.assertTrue(os.path.exists(os.path.join(self.root, "AGENTS.md")))
+        staged = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=self.root, capture_output=True,
+                                text=True, encoding="utf-8").stdout
+        self.assertEqual(staged.strip(), "")
 
     @unittest.skipUnless(shutil.which("git"), "git 없음")
     def test_git_auto_commit_message(self):

@@ -1,5 +1,5 @@
 /* Assets Manager UI — 그래프, 상세 패널, 드롭 영역, AI 작성 흐름, 가져오기, 기록과 되돌리기 (기획서 v3) */
-const APP_VERSION = "0.16.2"; // server.py의 APP_VERSION과 같아야 함
+const APP_VERSION = "0.16.3"; // server.py의 APP_VERSION과 같아야 함
 // Tauri 창(exe의 tauri.localhost, 개발 모드의 127.0.0.1:1430 개발 서버)이면 사이드카 8765,
 // 그 밖(서버가 UI를 직접 내주는 브라우저 모드, 어떤 포트든)은 같은 출처
 const API = window.__TAURI__ ? "http://127.0.0.1:8765" : "";

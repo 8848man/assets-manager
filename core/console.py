@@ -97,9 +97,10 @@ def _pop_undo(root: str) -> dict | None:
 # ------------------------------------------------------------------ 쓰기 도우미
 def _write(lib: Library, line: str, actor: str, rels: list[str], fn) -> None:
     import store
-    store.backup_sync(lib, f"콘솔 전: {line}")
+    # 명령 전: 그때까지의 변경(사람·다른 도구가 만든 것)은 앱 동작 이름 없이 기록한다
+    store.backup_sync(lib, checked_at="콘솔 명령 전 확인")
     _snapshot(lib.root, rels, line, actor)
-    fn()
+    fn()  # 명령이 만든 변경은 run()이 기록을 남긴 뒤 명령 이름으로 커밋한다
 
 
 def _mutate(lib: Library, nid: str, mut) -> None:
@@ -141,6 +142,8 @@ def run(root: str, argv: list[str], actor: str = "cli") -> dict:
     if changed:
         import store
         store.append_history(root, {"kind": "console", "actor": actor, "line": line, "changed": changed})
+        # 명령 뒤: 이 명령이 만든 변경(+ 기록 한 줄)만 명령 이름으로 커밋한다
+        store.backup_sync(_lib(root), f"콘솔: {line}")
     return {"code": code, "output": buf.getvalue(), "changed": changed}
 
 
@@ -390,7 +393,7 @@ def undo(root: str) -> dict | None:
     if not last:
         return None
     import store
-    store.backup_sync(_lib(root), f"콘솔 되돌리기 전: {last['line']}")
+    store.backup_sync(_lib(root), checked_at="콘솔 되돌리기 전 확인")
     for rel, text in last["files"].items():
         p = os.path.join(root, rel)
         if text is None:
@@ -399,6 +402,6 @@ def undo(root: str) -> dict | None:
         else:
             with open(p, "w", encoding="utf-8") as f:
                 f.write(text)
-    lib = _lib(root)
+    lib = _lib(root)  # 되돌린 변경은 run()이 "콘솔: undo"로 커밋한다
     ids = sorted({n["id"] for n in lib.nodes.values() if n.get("path") in last["files"]})
     return {"line": last["line"], "files": sorted(last["files"]), "ids": ids}

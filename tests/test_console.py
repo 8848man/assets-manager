@@ -60,6 +60,24 @@ class ConsoleTests(unittest.TestCase):
         self.assertEqual(read(self.d, "sets/blog.md"), before)
         self.assertIn("되돌릴", self.am("undo")["output"])
 
+    @unittest.skipUnless(shutil.which("git"), "git 없음")
+    def test_console_commits_split_by_source(self):
+        """명령 전 변경은 이름 없이 '폴더 변경 감지', 명령이 만든 변경은 '콘솔: <명령>'으로 따로 (ISSUE-032·033)."""
+        store.backup_sync(Library(self.d))  # 첫 기록
+        write(self.d, "principles/plain.md", "---\nid: plain\ntype: rule\nkind: principle\ntitle: 쉬운 말\nrules:\n  audience_level: 중학생\n---\n")
+        r = self.am("am set blog tone 차분한 문체")
+        self.assertEqual(r["code"], 0, r["output"])
+        log = subprocess.run(["git", "log", "-2", "--format=%s|%b<END>"], cwd=self.d, capture_output=True,
+                             text=True, encoding="utf-8").stdout.split("<END>")
+        after, before = log[0].strip(), log[1].strip()
+        self.assertTrue(after.startswith("콘솔: set blog tone"), after)
+        self.assertIn("sets/blog.md", after)
+        self.assertIn("history/drops.jsonl", after)  # 명령 기록도 같은 커밋
+        self.assertNotIn("plain", after.split("|")[0])
+        self.assertTrue(before.startswith("규칙 수정: plain"), before)  # 사람이 바꾼 것에는 콘솔 이름이 없다
+        self.assertIn("출처: 폴더 변경 감지 (콘솔 명령 전 확인)", before)
+        self.assertNotIn("sets/blog.md", before)
+
     def test_inherit_use_and_cycle_rejected(self):
         self.assertEqual(self.am("use blog plain")["code"], 0)
         L = Library(self.d)

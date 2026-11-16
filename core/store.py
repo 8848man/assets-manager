@@ -90,8 +90,12 @@ def _vdir(root: str, rel: str) -> str:
     return os.path.join(root, HISTORY, "versions", rel.replace("/", "__"))
 
 
-def backup_sync(lib: Library, message: str | None = None) -> dict:
-    """폴더를 읽을 때마다 호출: 바뀐 파일의 새 내용을 보관하고, Git이 있으면 커밋한다."""
+def backup_sync(lib: Library, message: str | None = None, checked_at: str | None = None) -> dict:
+    """폴더를 읽을 때마다 호출: 바뀐 파일의 새 내용을 보관하고, Git이 있으면 커밋한다.
+
+    message: 앱 동작이 **방금 만든** 변경을 기록할 때만 준다(동작이 끝난 뒤 호출).
+    동작 전에 그때까지의 변경을 쓸어 담는 호출은 message 없이 checked_at(예: "콘솔 명령 전 확인")만 준다.
+    그 변경은 사람이나 다른 도구가 만든 것이므로 앱 동작 이름을 붙이지 않는다 (ISSUE-032·033)."""
     root = lib.root
     man_path = os.path.join(root, HISTORY, "versions", "manifest.json")
     try:
@@ -125,7 +129,7 @@ def backup_sync(lib: Library, message: str | None = None) -> dict:
         os.makedirs(os.path.dirname(man_path), exist_ok=True)
         with open(man_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=1)
-    git = git_commit(root, message)
+    git = git_commit(root, message, checked_at)
     return {"versioned": changed, "git": git}
 
 
@@ -184,7 +188,7 @@ def git_status(root: str) -> dict:
 
 
 def _staged(root: str) -> list[tuple[str, str, str | None]]:
-    """`git add -A` 뒤의 변경 목록: (상태 글자, 경로, 이름 변경 전 경로)."""
+    """스테이징된 변경 목록(인덱스 열만): (상태 글자, 경로, 이름 변경 전 경로). 작업 폴더에만 있는 변경은 뺀다."""
     parts = _git(root, "status", "--porcelain=v1", "-z").stdout.split("\0")
     out, i = [], 0
     while i < len(parts):
@@ -192,18 +196,22 @@ def _staged(root: str) -> list[tuple[str, str, str | None]]:
         i += 1
         if len(e) < 4:
             continue
-        code, path, orig = (e[0] if e[0] != " " else e[1]), e[3:], None
+        code, path, orig = e[0], e[3:], None
         if code in "RC" and i < len(parts):
             orig = parts[i]
             i += 1
+        if code in " ?!":
+            continue
         out.append((code, path, orig))
     return out
 
 
 # 자동 커밋 메시지의 분류 (앞 폴더 기준, 표시 순서). 고정 문구 분류는 이름을 붙이지 않는다.
+# "설정"은 앱이 관리하는 루트 파일(.gitignore 줄 추가, Claude Code 권한 합치기)이라 자동 커밋한다.
 COMMIT_AREAS = [("규칙", ("sets/", "principles/")), ("레퍼런스", ("image/", "web/", "document/", "writing/", "golden/")),
                 ("산출물", ("outputs/",)), ("스킬", ("skills/",)), ("기본값", ("_defaults/",)),
-                ("드롭 기록", ("history/drops.jsonl",)), ("기록", ("history/",)), ("노드 배치", ("layout.json",))]
+                ("드롭 기록", ("history/drops.jsonl",)), ("기록", ("history/",)), ("노드 배치", ("layout.json",)),
+                ("설정", (".gitignore", ".claude/settings.json"))]
 COMMIT_FIXED = {"드롭 기록": "드롭 기록", "노드 배치": "노드 배치 저장"}
 COMMIT_ACTION = {"A": "추가", "M": "수정", "D": "삭제", "R": "이름 변경", "C": "복사"}
 
@@ -221,9 +229,11 @@ def _commit_area(rel: str) -> tuple[str, str]:
     return area, (os.path.splitext(name)[0] if area != "기타" else name)
 
 
-def commit_message(changes: list[tuple[str, str, str | None]], message: str | None = None) -> tuple[str, str]:
+def commit_message(changes: list[tuple[str, str, str | None]], message: str | None = None,
+                   checked_at: str | None = None) -> tuple[str, str]:
     """변경 목록으로 커밋 제목과 본문을 만든다.
-    제목: `[앱 동작 — ]분류 동작 · …: 이름1, 이름2, 이름3 외 N개`. 본문: 파일마다 한 줄 + 출처."""
+    제목: `[앱 동작 — ]분류 동작 · …: 이름1, 이름2, 이름3 외 N개`. 본문: 파일마다 한 줄 + 출처
+    (`앱 동작` 또는 `폴더 변경 감지[ (확인 시점)]`)."""
     order = [a for a, _ in COMMIT_AREAS] + ["기타"]
     groups: dict[tuple[str, str], list[str]] = {}
     lines = []
@@ -250,11 +260,27 @@ def commit_message(changes: list[tuple[str, str, str | None]], message: str | No
     lines.sort()
     if len(lines) > 50:
         lines = lines[:50] + [f"… 외 {len(lines) - 50}개"]
-    body = "\n".join(lines) + "\n\n출처: " + ("앱 동작" if message else "폴더 변경 감지")
+    source = "앱 동작" if message else "폴더 변경 감지" + (f" ({checked_at})" if checked_at else "")
+    body = "\n".join(lines) + "\n\n출처: " + source
     return subject, body
 
 
-def git_commit(root: str, message: str | None = None) -> dict:
+def _unstage(root: str, paths: list[str]) -> None:
+    """스테이징에서만 뺀다(파일은 그대로). 첫 커밋 전(HEAD 없음)에는 reset이 안 되므로 rm --cached."""
+    if not paths:
+        return
+    has_head = _git(root, "rev-parse", "--verify", "-q", "HEAD").returncode == 0
+    if has_head:
+        _git(root, "reset", "-q", "--", *paths)
+    else:
+        _git(root, "rm", "-q", "-r", "--cached", "--ignore-unmatch", "--", *paths)
+
+
+def git_commit(root: str, message: str | None = None, checked_at: str | None = None) -> dict:
+    """라이브러리 데이터만 자동 커밋한다.
+
+    분류가 "기타"인 파일(기획서·AGENTS.md·start.bat 같은 사람이 쓰는 루트 문서)은 스테이징에서 빼고
+    `skipped`로 돌려준다. 사람이 직접 커밋한다 (ISSUE-032·033, 선택지 C)."""
     try:
         st = git_status(root)
         if not st["available"] or st.get("inside_other"):
@@ -272,12 +298,18 @@ def git_commit(root: str, message: str | None = None) -> dict:
                 f.write(("\n" if have and have[-1] else "") + "\n".join(missing) + "\n")
         _git(root, "add", "-A")
         changes = _staged(root)
+        other = [c for c in changes if _commit_area(c[1])[0] == "기타"
+                 or (c[2] and _commit_area(c[2])[0] == "기타")]
+        skipped = sorted({p for c in other for p in (c[1], c[2]) if p})
+        if other:
+            _unstage(root, skipped)
+            changes = _staged(root)
         if not changes:
-            return {"available": True, "repo": True, "committed": False}
-        msg, body = commit_message(changes, message)
+            return {"available": True, "repo": True, "committed": False, "skipped": skipped}
+        msg, body = commit_message(changes, message, checked_at)
         r = _git(root, "commit", "-q", "-m", msg, "-m", body)
         return {"available": True, "repo": True, "committed": r.returncode == 0, "message": msg,
-                "error": r.stderr.strip() if r.returncode else None}
+                "skipped": skipped, "error": r.stderr.strip() if r.returncode else None}
     except Exception as e:
         return {"available": True, "error": str(e)}
 
