@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.16.2 · 기획서 v3.3(+14A~14K) 기준 · 2026-11-16
+앱 버전 0.16.3 · 기획서 v3.3(+14A~14K) 기준 · 2026-11-16
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -85,7 +85,7 @@
 | `core/server.py` | HTTP API, 정적 파일, 포트 인계(`/api/shutdown`), 레이아웃 저장 | `Handler`, `library()`, `node_detail`, `handle_drop`(v3.1 호환), `bind` | 모든 core 모듈 |
 | `core/drops.py` | 예상 결과 창: 놓은 것을 분류해 선택지 생성(stage), 실행(commit), 승격, 되돌리기 | `stage`, `commit`, `promote`, `undo`, `OPT` | `folder_requests`, `store` |
 | `core/folder_requests.py` | AI 요청의 수명: 준비 → 패키지 → 결과 수신 → 미리보기 → 적용. 원본 짝 맞추기 | `new_request`, `prepare`, `package`, `render`, `receive_zip`, `attach`, `auto_assign`, `assign`, `preview`, `apply`, `_set_rule` | `extract`, `store` |
-| `core/store.py` | 드롭 히스토리, 버전 보관, Git, 휴지통, 가져오기, 기본값 업데이트 | `append_history`, `read_history`, `backup_sync`, `fresh_files`, `versions_for`, `restore_version`, `git_commit`, `commit_message`, `delete_node`, `restore_trash`, `import_items`, `import_zip`, `defaults_updates`, `upgrade_defaults` | git(선택) |
+| `core/store.py` | 드롭 히스토리, 버전 보관, Git, 휴지통, 가져오기, 기본값 업데이트 | `append_history`, `read_history`, `backup_sync`, `fresh_files`, `versions_for`, `restore_version`, `git_commit`(라이브러리 데이터만, "기타" 제외), `_unstage`, `commit_message`, `delete_node`, `restore_trash`, `import_items`, `import_zip`, `defaults_updates`, `upgrade_defaults` | git(선택) |
 | `core/authoring.py` | 파일 하나·여럿을 AI가 메타로 등록하게 하는 작성 프롬프트 (미등록·기존 노드 다시 쓰기) | `build`, `render` | `extract` |
 | `core/components.py` | 구성 요소 분리(v3.9, Q81-A): 메타 `components` 정리(`normalize`), 잘라 낸 그림·구도 도식 캐시(`ensure`, `.assets/components/`), AI 요청(좌표 격자 사본 + 프롬프트) → 답 받기 → 미리보기(상자 수정 합치기) → 반영, 사람이 고친 요소 저장 | `normalize`, `ensure`, `crop_image`, `composition_image`, `grid_image`, `build`, `render_request`, `receive`, `preview`, `apply`, `save`, `open_request` | `folder_requests`, `store`, `tidy.parse_plan_text`, Pillow |
 | `core/tidy.py` | 하위 정리: 범위(scope)·결정적 진단(diagnose) → AI 요청 프롬프트 → plan(ops) 메모리 시뮬레이션 → 전·후 그래프·변경 이유·프롬프트 비교 → 적용 | `scope`, `diagnose`, `build`, `receive`, `simulate`, `preview`, `apply` | `folder_requests`, `store` |
@@ -107,7 +107,7 @@
 | `ui/compare.html` · `compare.js` | 두 프롬프트 버전의 결과와 골든 샘플을 출처를 가리고 비교(Q87) | `candidate`, `shuffle` | 브라우저 FileReader·Web Crypto |
 | `src-tauri/src/main.rs` | 셸, 사이드카 실행(`py` → `python` 순서), 종료 처리 | `spawn_server` | tauri 2, tauri-plugin-drag 2 |
 | `defaults/` | 앱 번들 기본값 (`keys.yaml`, `targets.yaml`, `defaults.md`) — 라이브러리에 없으면 복사 | | |
-| `tests/` | 단위·통합 테스트 110개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
+| `tests/` | 단위·통합 테스트 112개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
 
 ## 5. 데이터 모델
 
@@ -279,7 +279,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 - **AI가 부르게 하기** `skills.caller_apply`: 도구 스킬(경로를 채운 SKILL.md)을 개인 `~/.claude/skills`·`~/.agents/skills`에 설치, 또는 `~/.claude/CLAUDE.md`·`~/.codex/AGENTS.md`에 `<!-- assets-manager:start -->…end` 블록 한 줄. 블록 밖은 건드리지 않는다.
 
 ### 6.11 콘솔과 AI 탭 (v3.8, Q79-A·Q80-A)
-- **`am` 명령** `console.run(root, argv, actor)` → `{code, output, changed}`. 쓰기마다: `store.backup_sync` → 바뀔 파일의 이전 내용을 `.assets/console/undo.jsonl`에 한 줄로(새 파일은 `null`) → `folder_requests._rewrite_frontmatter`/`_set_rule`로 키 단위 쓰기(본문·키 순서 유지) → `history/drops.jsonl`에 `{kind: console, actor, line, changed}`. `inherit`는 쓴 뒤 `sources`로 순환을 확인하고 순환이면 곧바로 되돌린다. `use`는 원칙·스킬만 받는다(세트는 `inherit`). `new set`은 `global`이 있으면 기본으로 상속. `undo`는 스택 맨 위를 되돌린다(만든 파일은 지움, 그 전에 보관).
+- **`am` 명령** `console.run(root, argv, actor)` → `{code, output, changed}`. 쓰기마다: `store.backup_sync(checked_at="콘솔 명령 전 확인")`(그때까지의 변경을 이름 없이 기록) → 바뀔 파일의 이전 내용을 `.assets/console/undo.jsonl`에 한 줄로(새 파일은 `null`) → `folder_requests._rewrite_frontmatter`/`_set_rule`로 키 단위 쓰기(본문·키 순서 유지) → `history/drops.jsonl`에 `{kind: console, actor, line, changed}` → `backup_sync("콘솔: <명령>")`(이 명령의 변경과 기록 한 줄만, 0.16.3). `inherit`는 쓴 뒤 `sources`로 순환을 확인하고 순환이면 곧바로 되돌린다. `use`는 원칙·스킬만 받는다(세트는 `inherit`). `new set`은 `global`이 있으면 기본으로 상속. `undo`는 스택 맨 위를 되돌린다(만든 파일은 지움, 그 전에 보관).
 - **입구 세 곳이 같은 명령**: 콘솔 탭(`POST /api/console`, actor `user`), 명령줄(`cli.py <명령>`·`.assets/bin/am`, actor `cli`), AI 탭(PATH 앞에 `.assets/bin`, `AM_ACTOR=ai-tab`).
 - **AI 탭** `terminal.start(root, tool)`: `local_ai.status`의 경로로 Claude Code·Codex를 pty에서 띄운다(Windows `.cmd`는 `cmd /c`). 작업 폴더 = 라이브러리 루트, `TERM=xterm-256color`. 출력은 UTF-8 증분 디코딩 후 세션 버퍼(최대 40만 자, 넘치면 앞을 버리고 `base` 오프셋을 올림). `read(since, wait)`는 새 출력이 올 때까지 최대 `wait`초 기다리는 긴 폴링. 동시에 `MAX_AI = 1`개. 입력이 `IDLE_HINT`(30분) 없으면 UI가 닫기를 묻는다. 서버 종료(`/api/shutdown`, atexit, Ctrl+C) 때 모두 종료.
 - **권한** `terminal.ensure_permissions`: 서버 시작·AI 탭 시작 때 `.claude/settings.json`의 `permissions.allow`에 `Bash(am)` `Bash(am *)` `Bash(python|py app/core/cli.py *)`, `deny`에 `Edit(./sets/**)` `Edit(./principles/**)` `Edit(./skills/**)` `Edit(./history/**)` `Edit(./index.md)` `Edit(./graph.json)`을 없는 것만 더한다. 사용자 항목은 그대로, JSON이 깨져 있으면 손대지 않는다. (`inbox/<rid>/out/` 아래 쓰기는 막지 않는다 — 기존 요청 흐름.)
@@ -328,10 +328,11 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 
 로더 제외 목록: `engine.SKIP_DIRS`(`app`, `history`, `inbox`, 숨김 폴더). Git 제외 목록: `store.GITIGNORE_LINES`(없는 줄만 자동 추가).
 
-라이브러리 자동 커밋 메시지 (0.14.1, `store.commit_message`): `git add -A` 뒤 변경 목록(`_staged`, `status --porcelain=v1 -z`)으로 만든다.
+라이브러리 자동 커밋 메시지 (0.14.1, `store.commit_message`): `git add -A` 뒤 스테이징된 변경 목록(`_staged`, `status --porcelain=v1 -z`의 인덱스 열)으로 만든다.
+- 커밋 대상 (0.16.3, ISSUE-032·033): 분류가 "기타"인 파일(기획서·`AGENTS.md`·`start.bat` 같은 사람이 쓰는 루트 문서)은 `_unstage`로 스테이징에서 빼고(파일은 그대로) `git_commit` 결과의 `skipped`로 돌려준다. 사람이 직접 커밋한다. 앱이 관리하는 루트 파일 `.gitignore`·`.claude/settings.json`은 "설정" 분류로 커밋한다.
 - 제목: `[앱 동작 문구 — ]분류 동작 · …: 이름1, 이름2, 이름3 외 N개`. 분류는 앞 폴더 기준 `COMMIT_AREAS`(규칙·레퍼런스·산출물·스킬·기본값·드롭 기록·기록·노드 배치, 나머지는 기타), 동작은 추가·수정·삭제·이름 변경. 이름은 노드 id에 가깝게(확장자·`.meta.yaml` 제거, 스킬은 폴더 이름). `layout.json`은 "노드 배치 저장", `history/drops.jsonl`은 "드롭 기록"으로 이름 없이 쓴다.
-- 본문: 파일마다 `동작 경로` 한 줄(최대 50줄) + `출처: 폴더 변경 감지 | 앱 동작`.
-- 앱 동작 문구(`backup_sync(lib, message)`: "Assets Manager 시작", "놓기: …", "콘솔 전: …" 등)는 제목 앞에 붙는다. 0.14.0까지의 커밋은 "자동 기록: 변경 N개 (폴더 변경 감지)"였고, 지난 이력은 고치지 않는다.
+- 본문: 파일마다 `동작 경로` 한 줄(최대 50줄) + `출처: 폴더 변경 감지[ (확인 시점)] | 앱 동작`.
+- 앱 동작 문구(`backup_sync(lib, message)`: "놓기: …", "콘솔: …", "하위 정리 …" 등)는 제목 앞에 붙는다. **동작이 끝난 뒤** 그 동작이 만든 변경을 기록할 때만 준다. 동작 전·앱 시작 때 그때까지의 변경을 쓸어 담는 호출은 `message` 없이 `checked_at`("앱 시작 때 확인", "콘솔 명령 전 확인", "콘솔 되돌리기 전 확인")만 주어, 사람이 만든 변경에 앱 동작 이름이 붙지 않는다(0.16.3). 0.16.2까지는 "Assets Manager 시작", "콘솔 전: …"이 동작 전 쓸어 담기에 붙었다. 0.14.0까지의 커밋은 "자동 기록: 변경 N개 (폴더 변경 감지)"였고, 지난 이력은 고치지 않는다.
 
 ## 8. HTTP API (`core/server.py`, 127.0.0.1:8765)
 
@@ -437,7 +438,7 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 | 파일 | 다루는 것 |
 |---|---|
 | `test_engine.py` | 기본값 복사, 다중 상속, 순환, 동의어, 지시문, 결정성, 덜어내기 3단계, 민감도, 변경 감지, index |
-| `test_v3.py` | 우선순위·점검, 미등록·작성, 가져오기, 히스토리, 버전·휴지통·Git, 자동 커밋 메시지(분류·이름·이름 변경·출처), 기본값 업데이트, fresh |
+| `test_v3.py` | 우선순위·점검, 미등록·작성, 가져오기, 히스토리, 버전·휴지통·Git, 자동 커밋 메시지(분류·이름·이름 변경·출처·확인 시점), 루트 문서("기타")는 자동 커밋 제외·설정 파일은 커밋, 기본값 업데이트, fresh |
 | `test_requests.py` | 폴더 요청: 준비, 시트·묶음, 결과 미리보기·적용, 덮어쓰기, 잘못된 plan |
 | `test_v33.py` | 검색, 참고 예시·덜어내기, stage 선택지, commit(산출물·원본·변형·골든·승격·되돌리기), 요청 없는 zip·`@target`·짝 맞추기, 내보내기 명령, RAG, MCP(stdio 실제 프로세스), 노드 종류별 자동 연결, 개발 착수 프리셋 조립, `uses` 조립 순서, 하위 정리 왕복(프롬프트 동일·쓰이는 노드 휴지통 거부·값 변경 감지), 승인 게이트·작업 대기 끝 단락 |
 
@@ -447,7 +448,7 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 | `test_components.py` | 구성 요소(이미지가 아닌 키 `chart_style`로): 메타 정리·경고, 원본 + 요소 첨부 렌더·파일 생성, 결정성(같은 PNG·프롬프트), 이미지 키는 요소 없이 원본만, `ref:<id>#<요소>`·없는 요소 오류, 덜어내기(요소 먼저 글로), 요소 없으면 프롬프트 그대로, 요청 왕복(격자·붙여넣기·상자 수정·반영·다른 필드 보존), 기존 요소 바꾸기 기본 꺼짐·에이전트 경로, zip → `case: components`, 사람 수정 저장, 스킬 내보내기에 요소 포함 |
 | `test_v310.py` | 이미지 키(Q82-A): 규칙 단락·spec·ref check·우선순위 문장 없음, ImageGen판(chatgpt_web)·요청서판(claude_desktop·codex), 비슷한 원본 양방향·중복·원본 없는 것 제외, 원본 없음 경고, 덜어내기(비슷한 원본 먼저, 글·시트 변환 없음), 이미지 키 없으면 단락 없음, 옛 기본값 대비·사용자 `image: true` 키, 결정성 |
 | `test_embed.py` | 뜻 검색(가짜 인코더): 꺼져 있으면 키워드 검색 그대로·인코더 안 부름, 켜면 낱말이 안 겹쳐도 뜻으로 찾고 관계없는 것은 뺌·결정성, 벡터 캐시·바뀐 조각만 다시 계산·`index`의 정리, 참고 예시에 반영, 인코더 오류 시 키워드로, 모델 없으면 켜도 키워드 |
-| `test_console.py` | `am` set·unset·undo(본문 보존), use·inherit·순환 거부, new·rename·기록의 actor, 오류, 명령줄 연결(`cli.py set`·`standard`), 파일 서명, `.claude/settings.json` 합치기(사용자 항목 유지·깨진 JSON 보존), `am` 실행 파일, POSIX pty 세션(환경·한글 입출력·1개 제한·종료) |
+| `test_console.py` | `am` set·unset·undo(본문 보존), 명령 전 변경과 명령 변경을 따로 커밋(출처·이름), use·inherit·순환 거부, new·rename·기록의 actor, 오류, 명령줄 연결(`cli.py set`·`standard`), 파일 서명, `.claude/settings.json` 합치기(사용자 항목 유지·깨진 JSON 보존), `am` 실행 파일, POSIX pty 세션(환경·한글 입출력·1개 제한·종료) |
 | `test_render_web.py` | Chromium 렌더링은 기본 꺼짐이고 설정에서 켜고 끌 수 있음, Playwright 버전과 맞는 Chromium이 없으면 준비 안 됨 + 다시 받으라는 `reason`, 실행 성공은 기억(headless로 한 번만 띄움), 꺼져 있으면 HTML 추출이 브라우저를 띄우지 않음 (브라우저는 모의) |
 
 UI는 자동 테스트가 없다. 변경 후 브라우저 모드(`start.bat browser`)로 확인한다.

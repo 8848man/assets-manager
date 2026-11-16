@@ -38,15 +38,16 @@ import console  # noqa: E402
 import terminal  # noqa: E402
 from engine import library_signature  # noqa: E402
 
-APP_VERSION = "0.16.2"  # UI(app.js)의 APP_VERSION과 같아야 함
+APP_VERSION = "0.16.3"  # UI(app.js)의 APP_VERSION과 같아야 함
 UI_DIR = os.path.join(APP_DIR, "ui")
 LOCK = threading.Lock()
 STATE: dict = {}
 
 
-def library(sync: bool = False, message: str | None = None) -> Library:
+def library(sync: bool = False, message: str | None = None, checked_at: str | None = None) -> Library:
     """라이브러리를 읽는다. 파일이 그대로면(서명 같음) 캐시를 쓴다 (v3.8).
-    sync=True면 항상 다시 읽고 버전 보관·Git 기록도 한다."""
+    sync=True면 항상 다시 읽고 버전 보관·Git 기록도 한다.
+    message는 앱 동작이 끝난 뒤 그 변경을 기록할 때만, 동작 전·시작 때는 checked_at만 (store.backup_sync)."""
     with LOCK:
         sig = library_signature(STATE["root"])
         cached = STATE.get("lib")
@@ -55,7 +56,7 @@ def library(sync: bool = False, message: str | None = None) -> Library:
         lib = Library(STATE["root"])
         lib.build_index()
         if sync:
-            STATE["last_sync"] = store.backup_sync(lib, message)
+            STATE["last_sync"] = store.backup_sync(lib, message, checked_at)
             sig = library_signature(STATE["root"])  # 보관이 _defaults 등을 만들었을 수 있다
         STATE["lib"], STATE["sig"] = lib, sig
         return lib
@@ -599,7 +600,8 @@ def main() -> None:
     STATE["root"] = os.path.abspath(args.root)
     srv = bind(args.port)
     STATE["server"] = srv
-    library(sync=True, message="Assets Manager 시작")  # 시작 시 _defaults 복사, index 생성, 버전·Git 기록
+    # 시작 시 _defaults 복사, index 생성, 버전·Git 기록. 꺼져 있던 동안의 변경이므로 앱 동작 이름을 붙이지 않는다
+    library(sync=True, checked_at="앱 시작 때 확인")
     try:
         skills.install_tool_skill(STATE["root"])  # v3.6 도구 스킬을 라이브러리 안에 설치·갱신
     except OSError as e:
