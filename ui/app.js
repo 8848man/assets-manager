@@ -1,6 +1,7 @@
 /* Assets Manager UI — 그래프, 상세 패널, 드롭 영역, AI 작성 흐름, 가져오기, 기록과 되돌리기 (기획서 v3) */
-const APP_VERSION = "0.16.0"; // server.py의 APP_VERSION과 같아야 함
-const API = location.port === "8765" ? "" : "http://127.0.0.1:8765";
+const APP_VERSION = "0.16.1"; // server.py의 APP_VERSION과 같아야 함
+// 서버가 UI를 직접 내주면(브라우저 모드, 어떤 포트든) 같은 출처, Tauri 창(tauri.localhost 등)이면 사이드카 8765
+const API = location.protocol === "http:" && ["127.0.0.1", "localhost"].includes(location.hostname) ? "" : "http://127.0.0.1:8765";
 const TAURI = window.__TAURI__ || null;
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1558,8 +1559,9 @@ async function loadRenderWebBox() {
   box.innerHTML = `<h3>HTML 렌더링·애니메이션 추출 <span class="chip ${st.active ? "ok" : ""}">${st.active ? "켜짐" : "꺼짐"}</span></h3>
     <p class="muted">HTML 레퍼런스를 등록할 때 실제 화면의 계산된 스타일과 CSS 애니메이션을 함께 읽습니다. Chromium은 아래 버튼을 눌렀을 때만 받습니다. 렌더링은 로컬 파일을 오프라인으로 엽니다.</p>
     ${running ? `<div class="meta-line">${esc(st.job.step)}…</div>` : st.job?.state === "failed" ? `<div class="bad">${esc(st.job.error)}</div>` : ""}
+    ${!running && st.enabled && !st.ready && st.reason ? `<div class="bad">켜 두었지만 쓸 수 없습니다: ${esc(st.reason)}</div>` : ""}
     <div class="row">${st.active ? `<button class="small" id="render-web-off">끄기</button>` :
-      `<button class="primary small" id="render-web-on" ${running ? "disabled" : ""}>${st.ready ? "켜기" : "Chromium 내려받고 켜기"}</button>`}</div>`;
+      `<button class="primary small" id="render-web-on" ${running ? "disabled" : ""}>${st.ready ? "켜기" : st.enabled ? "Chromium 다시 내려받기" : "Chromium 내려받고 켜기"}</button>`}</div>`;
   $("#render-web-on")?.addEventListener("click", async (e) => { e.target.disabled = true; await post(st.ready ? "/api/render-web/config" : "/api/render-web/install", st.ready ? { enabled: true } : {}); loadRenderWebBox(); });
   $("#render-web-off")?.addEventListener("click", async () => { await post("/api/render-web/config", { enabled: false }); loadRenderWebBox(); });
   if (running) setTimeout(() => { if ($("#settings-dialog").open && document.visibilityState === "visible") loadRenderWebBox(); }, 1500);

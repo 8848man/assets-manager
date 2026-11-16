@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.16.0 · 기획서 v3.3(+14A~14K) 기준 · 2026-11-15
+앱 버전 0.16.1 · 기획서 v3.3(+14A~14K) 기준 · 2026-11-16
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -107,7 +107,7 @@
 | `ui/compare.html` · `compare.js` | 두 프롬프트 버전의 결과와 골든 샘플을 출처를 가리고 비교(Q87) | `candidate`, `shuffle` | 브라우저 FileReader·Web Crypto |
 | `src-tauri/src/main.rs` | 셸, 사이드카 실행(`py` → `python` 순서), 종료 처리 | `spawn_server` | tauri 2, tauri-plugin-drag 2 |
 | `defaults/` | 앱 번들 기본값 (`keys.yaml`, `targets.yaml`, `defaults.md`) — 라이브러리에 없으면 복사 | | |
-| `tests/` | 단위·통합 테스트 107개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
+| `tests/` | 단위·통합 테스트 110개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
 
 ## 5. 데이터 모델
 
@@ -297,7 +297,8 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 
 ### 6.13 블라인드 비교와 HTML 렌더링 (Q87·Q88)
 - `ui/compare.html`·`compare.js`: 사용자가 같은 세트·작업의 두 프롬프트 버전 결과(텍스트 또는 이미지)와 골든 샘플을 넣는다. 화면에서 세 결과의 출처를 무작위 순서로 가리고 선택 후 공개한다. 결과는 JSON으로 내려받는다. 앱은 AI를 자동 호출하거나 결과를 서버에 전송하지 않는다.
-- `render_web.status/install/set_enabled`: Playwright·Chromium은 설정 버튼에서만 내려받는다. 켜져 있으면 `extract.extract`가 정적 HTML 값에 `rendered`(1280×800 오프라인 브라우저의 계산 스타일·애니메이션)를 더한다. 브라우저가 없거나 꺼져 있으면 정적 값만 돌려준다. 오류는 `render_error`로 돌려 등록 자체는 계속한다.
+- `render_web.status/install/set_enabled`: Playwright·Chromium은 설정 버튼에서만 내려받는다. 켜져 있으면 `extract.extract`가 정적 HTML 값에 `rendered`(1280×800 오프라인 브라우저의 계산 스타일·애니메이션)를 더한다. 브라우저가 없거나 꺼져 있으면 정적 값만 돌려준다(꺼져 있으면 준비 확인도 하지 않는다). 오류는 `render_error`로 돌려 등록 자체는 계속한다.
+- 준비 확인(0.16.1) `_browser_ready`: 추출과 같은 방식(`launch(headless=True)`)으로 실제로 띄워 본다. Playwright 패키지가 업데이트되면 기대하는 Chromium 리비전이 바뀌어 예전에 받은 브라우저로는 실행되지 않기 때문이다(파일 존재만 보면 놓침). 성공한 Playwright 버전만 프로세스 안에서 기억하고, 실패는 매번 다시 확인한다. `status`는 준비가 안 됐을 때 `reason`(버전 불일치면 "Playwright <버전>에 맞는 Chromium이 없습니다. 다시 내려받으세요.")을 돌려준다.
 
 ## 7. 폴더 구조와 수명
 
@@ -410,7 +411,7 @@ Codex 읽기 전용 실행(Q85)은 최종 표준 출력의 YAML 코드 블록에
 
 - 설정 창(`#settings-dialog`, 상단 `설정` 버튼·초록 점 = 연결됨): `openSettings({reason, then})` — 도구 카드(찾음/버전/기본 선택/사용/연결 시험/설치 명령 복사/고급: 직접 경로·실행 인자). `reason`이 있으면 위에 '이 기능은 AI가 필요합니다' 안내와 단계, 연결되면 `계속하기`로 원래 작업을 이어 실행. 진행 표시 `#job-bar`(`runLocal`·`pollJob`·`renderJobs`: 경과 시간, 로그 보기, 취소, 실패 사유).
 - 설정 창의 뜻 검색 칸(v3.11, `loadEmbedBox`, `#embed-box`): 켜짐/꺼짐, 모델·패키지·색인 조각 수, `내려받고 켜기`/`켜기`·`끄기`·`다시 색인`. 작업 중에는 창이 열려 있고 보일 때만 1.5초마다 상태를 다시 읽는다.
-- 설정 창의 HTML 렌더링 칸(Q88, `loadRenderWebBox`): 상태, 선택형 Chromium 설치·켜기·끄기. 작업 중에는 창이 보일 때만 상태를 다시 읽는다.
+- 설정 창의 HTML 렌더링 칸(Q88, `loadRenderWebBox`): 상태, 선택형 Chromium 설치·켜기·끄기. 켜 두었지만 준비가 안 됐으면(버전 불일치 등) `reason`을 보여 주고 버튼은 "Chromium 다시 내려받기". 작업 중에는 창이 보일 때만 상태를 다시 읽는다.
 - 스킬: 그래프의 태그 모양 노드(보라 = 라이브러리 안, 파랑 = 개인 폴더, 이중 테두리 = 도구 스킬, 점선 = 갱신 필요, 빨강 = 직접 고침), 상단 `스킬` 토글. 세트 상세의 `#skill-box`(`loadSkillBox`: 범위×도구 상태 표, 내보내기·다시 내보내기·제거, 충돌 diff와 덮어쓰기, SKILL.md 미리보기), 스킬 상세 `renderSkill`.
 - 라이브러리 스킬: 초록 태그 노드(`libskill`). 상세 `renderLibSkill`(설명, 붙인 노드·떼기, 상속으로 받는 세트, 붙이기+범위 안내 `scopeHint`, 원칙으로 풀기, 파일, 가져온 곳·되살리기). 규칙 상세의 `skillsHtml`(함께 쓰는 스킬 + 붙이기). 설치된 스킬 상세의 '앱으로 가져오기'(붙일 노드, 원래 스킬 끄기). 설정 창 `callerHtml`(개인 스킬·전역 지침 설치/제거, 직접 부르는 명령).
 - 하위 정리 창(`#tidy-dialog`): `openTidy` → (열린 요청이 있으면 이어서) 1 진단 · 2 요청 복사 · 3 답 붙여넣기 → `showTidyPreview`(왜, 전·후 미니 그래프 `miniGraph`, 최종 프롬프트 비교, 변경 체크) → `applyTidy` → `arrangeTidy`(세트는 깊이 순 아래로, 원칙은 오른쪽 줄, 레퍼런스는 왼쪽 줄로 다시 배치하고 저장).
@@ -425,6 +426,7 @@ Codex 읽기 전용 실행(Q85)은 최종 표준 출력의 YAML 코드 블록에
 - 드롭: `setupInbound`(Tauri `tauri://drag-*` 이벤트 또는 HTML5) → `handleDrop` → `/api/stage` → `openOutcome` → `confirmOutcome` → `/api/stage/<sid>/commit`. 결과 확인 중 놓은 파일은 `attach`로 간다.
 - 내보내기 드래그: Tauri는 `plugin:drag|start_drag`(파일 여러 개), 브라우저는 텍스트 드래그. 놓으면 `/api/history`에 기록.
 - `APP_VERSION`은 `server.py`와 `app.js`에서 같아야 한다(다르면 UI가 경고).
+- API 주소 `API`(0.16.1): 페이지가 `http://127.0.0.1` 또는 `http://localhost`에서 열렸으면(서버가 UI를 직접 내줌, 포트 무관) 같은 출처 `""`, 그 밖(Tauri 창 `tauri.localhost` 등)이면 사이드카 `http://127.0.0.1:8765`. `server.py --port`로 다른 포트에 띄운 서버도 브라우저 모드로 열 수 있다.
 
 ## 12. 테스트
 
@@ -446,7 +448,7 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 | `test_v310.py` | 이미지 키(Q82-A): 규칙 단락·spec·ref check·우선순위 문장 없음, ImageGen판(chatgpt_web)·요청서판(claude_desktop·codex), 비슷한 원본 양방향·중복·원본 없는 것 제외, 원본 없음 경고, 덜어내기(비슷한 원본 먼저, 글·시트 변환 없음), 이미지 키 없으면 단락 없음, 옛 기본값 대비·사용자 `image: true` 키, 결정성 |
 | `test_embed.py` | 뜻 검색(가짜 인코더): 꺼져 있으면 키워드 검색 그대로·인코더 안 부름, 켜면 낱말이 안 겹쳐도 뜻으로 찾고 관계없는 것은 뺌·결정성, 벡터 캐시·바뀐 조각만 다시 계산·`index`의 정리, 참고 예시에 반영, 인코더 오류 시 키워드로, 모델 없으면 켜도 키워드 |
 | `test_console.py` | `am` set·unset·undo(본문 보존), use·inherit·순환 거부, new·rename·기록의 actor, 오류, 명령줄 연결(`cli.py set`·`standard`), 파일 서명, `.claude/settings.json` 합치기(사용자 항목 유지·깨진 JSON 보존), `am` 실행 파일, POSIX pty 세션(환경·한글 입출력·1개 제한·종료) |
-| `test_render_web.py` | Chromium 렌더링은 기본 꺼짐이고 설정에서 켜고 끌 수 있음(브라우저 준비 상태는 모의) |
+| `test_render_web.py` | Chromium 렌더링은 기본 꺼짐이고 설정에서 켜고 끌 수 있음, Playwright 버전과 맞는 Chromium이 없으면 준비 안 됨 + 다시 받으라는 `reason`, 실행 성공은 기억(headless로 한 번만 띄움), 꺼져 있으면 HTML 추출이 브라우저를 띄우지 않음 (브라우저는 모의) |
 
 UI는 자동 테스트가 없다. 변경 후 브라우저 모드(`start.bat browser`)로 확인한다.
 

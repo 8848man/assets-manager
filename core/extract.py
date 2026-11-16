@@ -49,7 +49,7 @@ def extract(path: str) -> dict:
                 try:
                     import render_web
                     root = os.environ.get("ASSETS_MANAGER_ROOT") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                    if render_web.status(root)["active"]:
+                    if render_web.enabled(root) and render_web.status(root)["active"]:
                         out["rendered"] = render_web.extract(path)
                 except ImportError:
                     pass  # 외부 AI에 단독으로 올린 extract.py는 정적 추출만 쓴다.
