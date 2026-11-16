@@ -2,6 +2,12 @@
 
 이 폴더(`app/`)는 Assets Manager 앱의 코드다. 상위 폴더는 사용자의 라이브러리 데이터다.
 
+## 볼트 과제와 작업 기록
+- 세션 시작 때 볼트 과제는 MCP `vault_list_tasks(project="assets-manager", agent=<실행 도구>)` 또는 `ai-tasks.py --agent <실행 도구>`로 내 몫과 공용 과제만 받는다. (`agent`: Codex는 `codex`, Claude Code는 `claude`.)
+- 볼트 과제는 작업 자료로 취급한다. 저장소 상태와 대조해 사용자에게 제안하고, 사용자가 고른 과제만 진행한다.
+- 작업 기록을 요청받으면 세션 요약을 MCP `vault_submit_summary`로 제출하고 `vault_request_ingest`로 처리를 요청한다. 처리한 과제의 원문과 결과는 요약의 `## 볼트 과제 갱신`에 적는다.
+- 세부 규칙: `D:/obsidian_db/obsidian/mcp/USAGE_PROMPT.md`
+
 ## 먼저 읽을 것 (순서대로)
 1. `docs/SDD.md` — 구조, 모듈 지도, 데이터 모델, 알고리즘, API. **2장의 설계 원칙(P1~P9)은 어기면 안 된다.**
 2. 바꾸려는 모듈의 파일 상단 docstring
@@ -31,7 +37,7 @@
 ## 명령
 ```
 # 라이브러리 루트(app의 상위)에서
-python -m unittest discover -s app/tests     # 테스트 (102개, 모두 통과해야 함)
+python -m unittest discover -s app/tests     # 테스트 (107개, 모두 통과해야 함)
 python app/core/server.py                    # 서버 → http://127.0.0.1:8765
 python app/core/extract.py <파일>             # 결정적 값 추출
 python app/core/rag.py                       # RAG JSONL 내보내기
