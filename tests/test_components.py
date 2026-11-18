@@ -75,7 +75,7 @@ class ComponentsTest(unittest.TestCase):
 
     def test_render_attaches_original_and_components(self):
         picture(self.root, "ill")
-        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill\n")
+        rule(self.root, "sets/a.md", "a", None, "  palette: ref:ill\n")
         p = self.lib().package("a", "claude_desktop", write=True)
         pr = p["prompt"]
         self.assertIn("첨부 [1] ill.png", pr)
@@ -95,7 +95,7 @@ class ComponentsTest(unittest.TestCase):
 
     def test_deterministic(self):
         picture(self.root, "ill")
-        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill\n")
+        rule(self.root, "sets/a.md", "a", None, "  palette: ref:ill\n")
         p1 = self.lib().package("a", "claude_desktop", write=True)
         with open(p1["files"][4], "rb") as f:
             b1 = f.read()
@@ -120,7 +120,7 @@ class ComponentsTest(unittest.TestCase):
 
     def test_part_reference(self):
         picture(self.root, "ill")
-        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill#character\n")
+        rule(self.root, "sets/a.md", "a", None, "  palette: ref:ill#character\n")
         L = self.lib()
         self.assertEqual([i for i in L.issues if i["level"] == "error"], [])
         p = L.package("a", "claude_desktop", write=True)
@@ -132,12 +132,12 @@ class ComponentsTest(unittest.TestCase):
 
     def test_missing_part_is_error(self):
         picture(self.root, "ill")
-        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill#nope\n")
+        rule(self.root, "sets/a.md", "a", None, "  palette: ref:ill#nope\n")
         self.assertTrue(any("구성 요소 없음" in i["message"] for i in self.lib().issues))
 
     def test_trim_components_to_text_first(self):
         picture(self.root, "ill")
-        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill\n")
+        rule(self.root, "sets/a.md", "a", None, "  palette: ref:ill\n")
         L = self.lib()
         L.targets["tiny"] = {"label": "작은", "kind": "chat", "max_files": 3}
         p = L.package("a", "tiny", trim=True, write=False)
@@ -149,7 +149,7 @@ class ComponentsTest(unittest.TestCase):
     def test_no_components_prompt_unchanged(self):
         os.makedirs(os.path.join(self.root, "image"))
         picture(self.root, "ill", "")
-        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill\n")
+        rule(self.root, "sets/a.md", "a", None, "  palette: ref:ill\n")
         pr = self.lib().package("a", "claude_desktop", write=False)["prompt"]
         self.assertNotIn("1-a", pr)
         self.assertNotIn("요소", pr)
@@ -219,7 +219,7 @@ class ComponentsTest(unittest.TestCase):
     def test_skill_compile_copies_components(self):
         import skills
         picture(self.root, "ill")
-        rule(self.root, "sets/a.md", "a", None, "  chart_style: ref:ill\n")
+        rule(self.root, "sets/a.md", "a", None, "  palette: ref:ill\n")
         out = skills.compile_set(self.lib(), "a")
         self.assertIn("references/ill.character.png", out["files"])
         self.assertIn("references/ill.composition.png", out["files"])

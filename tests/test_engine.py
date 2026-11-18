@@ -91,7 +91,7 @@ class EngineTest(unittest.TestCase):
         L = self.lib()
         p = L.package("a", "codex")
         self.assertIn("특별지시 [1] g.png", p["prompt"])
-        self.assertIn("첨부 [2] g.png의 형태", p["prompt"])
+        self.assertIn("- 참조 이미지로 첨부: [2] g.png (차트·도식 스타일)", p["prompt"])
         self.assertIn(os.path.join(self.root, "image", "g.png"), p["prompt"])  # Codex는 경로 포함
         q = L.package("a", "chatgpt_web")
         self.assertNotIn("파일 경로", q["prompt"])
@@ -164,7 +164,8 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(p["needs_strip"])
         s = L.package("a", "chatgpt_web", strip_sensitive=True)
         self.assertEqual(len(s["files"]), 1)
-        self.assertIn("비밀 스펙", s["prompt"])
+        self.assertNotIn("비밀 스펙", s["prompt"])  # 이미지 스타일을 글로 대체하지 않음
+        self.assertNotIn("## 이미지 생성", s["prompt"])
         c = L.package("a", "codex")
         self.assertFalse(c["needs_strip"])  # Codex는 허용
 

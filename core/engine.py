@@ -52,9 +52,9 @@ PART_DEFAULTS = {
 
 # v3.10 (Q82-A): 이미지 키는 원본(+비슷한 원본)만 ImageGen 참조로 넘기고 스타일을 글로 쓰지 않는다.
 # keys.yaml에 image: true 표시가 없으면(기본값 v4 이하) 이 목록을 쓴다
-IMAGE_KEYS_DEFAULT = ("character_style", "composition", "shape_style", "image_style")
+IMAGE_KEYS_DEFAULT = ("chart_style", "character_style", "composition", "shape_style", "image_style")
 IMAGE_GEN_DEFAULT = ("chatgpt_web",)  # targets.yaml에 image_gen이 없을 때(기본값 v2) ImageGen이 있는 대상
-IMAGE_CHECK = "이미지는 첨부 원본을 참조 이미지로 썼고(또는 ImageGen 요청서로 남겼고), 스타일을 글로 바꿔 쓰지 않았는가"
+IMAGE_CHECK = "삽화·차트·도식은 첨부 원본을 ImageGen 참조 이미지로 썼거나 요청서로 남겼고, SVG·코드로 직접 그리거나 스타일을 글로 바꾸지 않았는가"
 
 
 class RuleConflictError(ValueError):
@@ -1168,14 +1168,15 @@ def image_lines(att: list[tuple], rules: list[tuple], image_gen: bool) -> list[s
     """v3.10 (Q82-A) '## 이미지 생성' 단락. att = [(번호, 역할, 파일)], rules = [(라벨, 사용자 규칙 값)].
     스타일은 첨부 원본이 맡고, 글은 장면과 사용자가 쓴 '원본과 다르게 할 점'뿐이다."""
     if image_gen:
-        out = ["## 이미지 생성 (ImageGen)", "이미지(삽화)가 필요하면 ImageGen으로 만드세요."]
+        out = ["## 이미지 생성 (ImageGen)",
+               "삽화·차트·도식이 필요하면 ImageGen으로 만드세요. SVG·코드로 직접 그리거나 다른 생성 도구로 대신하지 마세요."]
         if att:
             out.append("- 아래 첨부를 **참조 이미지로 직접 넣으세요.** 첨부를 글로 묘사해서 새로 그리지 마세요. "
                        "스타일(선, 색, 질감, 캐릭터, 도형)은 첨부 원본을 그대로 따릅니다.")
             out += [f"  - [{num}] {fn} — {role}" for num, role, fn in att]
         else:
             out.append("- 참조할 원본 이미지가 없습니다.")
-        out.append("- 이미지 프롬프트의 글은 장면 내용(무엇이, 어디서, 무엇을 하는가)"
+        out.append("- 이미지 프롬프트의 글은 삽화의 장면 또는 차트·도식의 데이터·축·라벨·관계"
                    + ("과 아래 '원본과 다르게 할 점'만 쓰세요." if rules else "만 쓰세요.")
                    + " 스타일 설명을 덧붙이지 마세요.")
         if rules:
@@ -1184,19 +1185,19 @@ def image_lines(att: list[tuple], rules: list[tuple], image_gen: bool) -> list[s
         return out
     refs = ", ".join(f"[{num}] {fn} ({role})" for num, role, fn in att)
     out = ["## 이미지 생성 (ImageGen 요청서)",
-           "이미지(삽화)는 직접 그리지 마세요. SVG·코드·다른 생성 도구로 흉내 내지도 마세요. "
-           "이미지가 들어갈 자리마다 아래 형식의 ImageGen 요청서를 결과물 끝에 쓰세요. "
+           "삽화·차트·도식은 직접 그리지 마세요. SVG·코드·다른 생성 도구로 흉내 내지도 마세요. "
+           "삽화·차트·도식이 들어갈 자리마다 아래 형식의 ImageGen 요청서를 결과물 끝에 쓰세요. "
            "사용자가 요청서와 첨부 원본을 ChatGPT ImageGen에 넣어 만듭니다.",
            "", "```markdown", "### 이미지 1: <들어갈 자리>"]
     if att:
         out.append(f"- 참조 이미지로 첨부: {refs}")
-    out.append("- 장면: <무엇이, 어디서, 무엇을 하는가 — 1~3문장>")
+    out.append("- 장면 또는 내용: <삽화의 장면, 또는 차트·도식의 데이터·축·라벨·관계 — 1~3문장, 원본 내용은 복사하지 않기>")
     if rules:
         out.append("- 원본과 다르게 할 점: " + " / ".join(f"{label}: {value}" for label, value in rules))
-    out.append("- 지시: 첨부한 이미지를 참조 이미지로 그대로 사용하고, 스타일은 첨부를 따르세요. 장면만 새로 그리세요."
-               if att else "- 지시: 장면만 그리세요.")
+    out.append("- 지시: 해당 종류의 첨부 이미지를 참조 이미지로 사용하고, 스타일은 첨부를 따르세요. 장면 또는 내용만 새로 만드세요."
+               if att else "- 지시: 장면 또는 내용만 새로 만드세요.")
     out += ["```", "",
-            "'<들어갈 자리>'와 '장면'만 채우고 나머지 줄은 그대로 옮기세요. 장면에 스타일 설명(선, 색, 질감, 얼굴 등)을 넣지 마세요."]
+            "'<들어갈 자리>'와 '장면 또는 내용'만 채우고 나머지 줄은 그대로 옮기세요. 스타일 설명(선, 색, 질감, 얼굴 등)을 넣지 마세요."]
     return out
 
 
