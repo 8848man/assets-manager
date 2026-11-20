@@ -1177,7 +1177,7 @@ def image_lines(att: list[tuple], rules: list[tuple], image_gen: bool) -> list[s
         else:
             out.append("- 참조할 원본 이미지가 없습니다.")
         out.append("- 이미지 프롬프트의 글은 삽화의 장면 또는 차트·도식의 데이터·축·라벨·관계"
-                   + ("과 아래 '원본과 다르게 할 점'만 쓰세요." if rules else "만 쓰세요.")
+                   + ("와 아래 '원본과 다르게 할 점'만 쓰세요." if rules else "만 쓰세요.")
                    + " 스타일 설명을 덧붙이지 마세요.")
         if rules:
             out.append("- 원본과 다르게 할 점 (사용자 규칙 — 이것만 원본보다 우선):")
