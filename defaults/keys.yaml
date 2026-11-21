@@ -21,7 +21,7 @@
 #
 # 구체적인 캐릭터나 화풍은 여기에 쓰지 마세요. 여기는 모든 세트가 공유합니다.
 # 캐릭터 묘사는 세트의 규칙 값이나 캐릭터 레퍼런스 노드에 둡니다.
-version: 6
+version: 7
 keys:
   language:
     label: 언어
@@ -82,11 +82,10 @@ keys:
   chart_style:
     label: 차트·도식 스타일
     domain: document
+    image: true
     priority: recommended
     aliases: [graph_style, 그래프스타일, 차트스타일]
     instruction: "{value}"
-    ref_instruction: "도식이나 차트가 필요하면 첨부 [{n}] {file}의 형태(레이아웃, 도형 모양, 라벨 배치, 색 구분 방식)를 따르세요."
-    check: "도식의 레이아웃과 라벨 배치가 차트 레퍼런스와 같은 방식인가"
   character_style:
     label: 캐릭터
     domain: content

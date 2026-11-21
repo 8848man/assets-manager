@@ -111,8 +111,27 @@ class ImageGenTest(unittest.TestCase):
         self.assertNotIn("캐릭터 스펙", p["prompt"])
         self.assertTrue(any("비슷한 원본" in l for l in p["log"]))
 
+    def test_chart_and_diagram_use_imagegen_for_each_target(self):
+        image_ref(self.root, "naver-graph-style", spec="2x2 포지셔닝 매트릭스")
+        rule(self.root, "a.md", "a", None, "  chart_style: ref:naver-graph-style\n")
+        for target in ("chatgpt_web", "claude_desktop", "codex"):
+            p = self.pkg(target)
+            pr = p["prompt"]
+            self.assertIn("naver-graph-style.png", [os.path.basename(f) for f in p["files"]])
+            self.assertIn("naver-graph-style.png", pr)
+            self.assertIn("차트·도식 스타일", pr)
+            self.assertIn("삽화·차트·도식", pr)
+            self.assertIn("SVG·코드", pr)
+            self.assertIn(f"- [ ] {IMAGE_CHECK}", pr)
+            self.assertNotIn("2x2 포지셔닝 매트릭스", pr)  # spec은 스타일 설명으로 옮기지 않음
+            if target == "chatgpt_web":
+                self.assertIn("## 이미지 생성 (ImageGen)\n", pr)
+            else:
+                self.assertIn("## 이미지 생성 (ImageGen 요청서)", pr)
+                self.assertIn("차트·도식의 데이터·축·라벨·관계", pr)
+
     def test_no_image_keys_no_section(self):
-        rule(self.root, "a.md", "a", None, "  chart_style: ref:ill\n  tone: 친근\n")
+        rule(self.root, "a.md", "a", None, "  palette: ref:ill\n  tone: 친근\n")
         p = self.pkg()["prompt"]
         self.assertNotIn("## 이미지 생성", p)
         self.assertNotIn(IMAGE_CHECK, p)

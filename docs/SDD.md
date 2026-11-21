@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.16.3 · 기획서 v3.3(+14A~14K) 기준 · 2026-11-16
+앱 버전 0.16.4 · 기획서 v3.3(+14A~14K) 기준 · 2026-11-18
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -107,7 +107,7 @@
 | `ui/compare.html` · `compare.js` | 두 프롬프트 버전의 결과와 골든 샘플을 출처를 가리고 비교(Q87) | `candidate`, `shuffle` | 브라우저 FileReader·Web Crypto |
 | `src-tauri/src/main.rs` | 셸, 사이드카 실행(`py` → `python` 순서), 종료 처리 | `spawn_server` | tauri 2, tauri-plugin-drag 2 |
 | `defaults/` | 앱 번들 기본값 (`keys.yaml`, `targets.yaml`, `defaults.md`) — 라이브러리에 없으면 복사 | | |
-| `tests/` | 단위·통합 테스트 112개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
+| `tests/` | 단위·통합 테스트 113개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
 
 ## 5. 데이터 모델
 
@@ -175,10 +175,10 @@ components:                   # v3.9 이미지만: 캐릭터·도형·구도로 
 relations: [{ type: variant_of | similar_to | pairs_with | supersedes | derived_from, target: <id> }]
 ```
 
-### 5.4 키 어휘 (`_defaults/keys.yaml`, version 6, 35개)
+### 5.4 키 어휘 (`_defaults/keys.yaml`, version 7, 35개)
 
 키마다 `label`, `domain`, `priority`(required/recommended/optional), `aliases`(동의어 경고), `instruction`, `ref_instruction`, `check`, `precedence`. 사용자 정의 키 허용(동의어면 경고). `domain: dev` 키 15개(설계 승인·문서 역할·충돌 처리 등)는 개발 착수 원칙 프리셋용. `value_type: list`인 키(`forbidden`, `open_questions`)는 여러 부품 원칙의 값을 합치고 중복을 뺀다. 나머지는 단일 키이며 같은 계층의 부품 원칙끼리 값이 다르면 조립을 멈춘다(Q86). 코드 안의 특수 키: `_example_<n>`(참고 예시, `priority: example` = 덜어내기 1순위).
-**이미지 키 (v5, Q82-A):** `image: true`인 키(`character_style`, `composition`, `shape_style`, `image_style`)는 `ref_instruction`·`check`를 두지 않는다. `precedence`는 첨부 순서에만 쓰고 문장은 만들지 않는다. 라이브러리 `keys.yaml`에 `image: true`가 하나도 없으면(v4 이하) `IMAGE_KEYS_DEFAULT`를 쓴다. `chart_style`·`golden_sample`은 이미지 키가 아니다(기존 지시문 그대로).
+**이미지 키 (v7, Q82-A):** `image: true`인 키(`chart_style`, `character_style`, `composition`, `shape_style`, `image_style`)는 `ref_instruction`·`check`를 두지 않는다. 차트·도식도 원본 이미지를 ImageGen 참조로 넘긴다. `precedence`는 첨부 순서에만 쓰고 문장은 만들지 않는다. 라이브러리 `keys.yaml`에 `image: true`가 하나도 없으면(v4 이하) `IMAGE_KEYS_DEFAULT`를 쓴다. `golden_sample`은 이미지 키가 아니다.
 **드롭 대상 (`targets.yaml` version 3):** `image_gen`(ImageGen으로 직접 그리는지; 기본값은 `chatgpt_web`만 true). 항목이 없으면(v2) `IMAGE_GEN_DEFAULT`로 판단.
 v4(v3.9): `shape_style`(도형, `image_style`보다 도형에 관해 우선) 추가, 최상위 `parts:` — 구성 요소 종류(character·shape·composition)마다 `label`, `key`(같은 측면의 규칙 키), `ref_instruction`(`{n} {file} {title}`), `check`(`{n}`). 라이브러리 keys.yaml에 `parts`가 없으면 `engine.PART_DEFAULTS`(같은 내용)를 쓴다. 렌더용 특수 모드 키: `<키>#<요소 이름>`(요소 하나의 attach/text/drop).
 
@@ -206,7 +206,7 @@ v4(v3.9): `shape_style`(도형, `image_style`보다 도형에 관해 우선) 추
 ### 6.2 렌더 (`Library.render`) — 프롬프트 단락 순서
 `# 작업 지침` → (`## 이번 작업`) → `## 규칙` → (`## 우선순위`: 키 쌍 문장 + 참고 예시 문장) → `## 첨부 레퍼런스` → `## 출력 전 자가 점검`(키 check + 레퍼런스 check, 중복 제거) → (경로 모드: `## 파일 경로` + 에이전트용 `## 더 찾아볼 수 있는 산출물`).
 `mode[key]`: `attach` | `text`(spec으로 대체) | `sheet`(컨택트 시트 칸) | `drop`(제외). 이미지 키는 `attach` 외에는 모두 제외, `<키>~similar`로 비슷한 원본만 뺄 수 있다.
-이미지 생성 단락 (v3.10, Q82-A, `image_lines`): 이미지 키는 `## 규칙`에 넣지 않는다. 원본 → 비슷한 원본 순으로 첨부 번호를 이어 받고(같은 레퍼런스는 한 번만), `## 첨부 레퍼런스` 바로 뒤에 `## 이미지 생성`을 넣는다. `image_gen=True`(ImageGen판): 첨부를 참조 이미지로 직접 넣으라, 글로 묘사해 새로 그리지 말라, 첨부마다 `[n] 파일 — 역할(키 라벨, 비슷한 원본이면 '· 비슷한 원본')`, 글은 장면 + 사용자 규칙만, `원본과 다르게 할 점`(이미지 키의 텍스트 값). `False`(요청서판): 직접 그리지 말고 자리마다 고정 형식 ImageGen 요청서(참조 첨부 목록·장면·다르게 할 점·고정 지시)를 결과물 끝에 쓰라, AI가 채우는 것은 자리와 장면뿐. 자가 점검에 `IMAGE_CHECK` 한 줄. 이미지 키가 없으면 v3.9와 글자 하나까지 같다.
+이미지 생성 단락 (v3.10, Q82-A, `image_lines`): 삽화·차트·도식의 이미지 키는 `## 규칙`에 넣지 않는다. 원본 → 비슷한 원본 순으로 첨부 번호를 이어 받고(같은 레퍼런스는 한 번만), `## 첨부 레퍼런스` 바로 뒤에 `## 이미지 생성`을 넣는다. `image_gen=True`(ImageGen판, ChatGPT 웹): 첨부를 참조 이미지로 직접 넣고 ImageGen으로 만들도록 지시한다. 첨부마다 `[n] 파일 — 역할(키 라벨, 비슷한 원본이면 '· 비슷한 원본')`을 적고, 글은 삽화의 장면 또는 차트·도식의 데이터·축·라벨·관계와 사용자 규칙 값만 넣는다. `False`(요청서판): SVG·코드로 직접 그리지 않고 자리마다 고정 형식 ImageGen 요청서(참조 첨부 목록·장면 또는 내용·다르게 할 점·고정 지시)를 결과물 끝에 쓰게 한다. 자가 점검의 `IMAGE_CHECK`는 삽화·차트·도식을 모두 확인한다. 이미지 키가 없으면 단락과 점검을 넣지 않는다.
 함께 쓰는 스킬 (v3.7): `## 첨부 레퍼런스` 뒤, 자가 점검 앞에 `## 함께 쓰는 스킬` — 스킬마다 제목·설명·위치만(본문은 넣지 않고 "해당되면 읽고 따르라, 위 규칙이 우선"). 경로 모드는 SKILL.md 절대 경로, 채팅 대상은 첨부(패키지가 `<이름>.SKILL.md`로 복사해 이름이 겹치지 않게). 자가 점검에 "해당 스킬을 따랐는가" 한 줄.
 구성 요소 (v3.9, Q81-A, `emit_components`, **v3.10부터 이미지가 아닌 키에서만**): 원본 항목 바로 아래에 들여 쓴 줄로 요소마다 `parts[part].ref_instruction` + (구도) `(도식 번호: 1 … · 2 …)` + `설명: spec`. 원본이 첨부면 번호 `[n-a]` `[n-b]`…, 원본이 시트면 새 정수 번호, 원본이 글(text)이면 요소도 글로(spec 없으면 뺌). 첨부 목록에 `[n-a] <id>.<요소>.png — 원본 제목 · 요소 제목`. 자가 점검에 `parts[part].check`(번호 채움) + 요소 `check`. 짝 키(`pkey`)가 조립 결과에 있고 원본의 키와 다르면 `## 우선순위`에 "{요소}에 관해서는 **{키}** 규칙을 분리한 요소(첨부 [n-a])보다 우선합니다. 규칙에 없는 부분은 요소를 따르세요." 요소가 없으면 v3.8과 글자 하나까지 같다.
 진행 방식 단락 (v3.4, Q73-A, `process_lines`): 게이트가 켜져 있으면 `## 이번 작업` 바로 뒤(규칙 앞)에 `## 진행 방식`을 넣는다 — 이해한 작업·결과물 구성·이미지 계획·확인할 것만 짧게 답하고 승인을 기다림(규칙 요약 금지), 승인 후에는 계획에 없는 것까지 규칙 전체·레퍼런스·자가 점검을 적용, 승인 전 금지는 결과물(본문·이미지·코드·파일) 만들기와 기존 파일 수정뿐(레퍼런스 열어 보기는 허용). 작업이 없으면 같은 단락 앞에 '레퍼런스를 살펴 두고 한 줄로 답한 뒤 기다리기'를 붙인다. 자가 점검 끝에 `GATE_CHECK` 한 줄을 더해 **프롬프트가 품질 기준으로 끝나게** 한다. 게이트를 끄면 아무것도 붙지 않아 v3.3 프롬프트와 글자 하나까지 같다. `gate`는 조립 순서에서 마지막으로 정한 노드가 이기고, 기본은 켜짐. 세 대상 앱에 같은 문장(P7). `canonical`에는 넣지 않는다.
@@ -286,7 +286,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 - **변경 감지·캐시** `engine.library_signature(root)`: 로더가 읽는 파일의 (상대 경로, 크기, 수정 시각) sha1 앞 16자. 앱이 쓰는 `index.md` `graph.json` `layout.json`과 숨김·제외 폴더는 뺀다. `server.library()`는 서명이 같으면 캐시한 `Library`를 돌려주고, `sync=True`면 항상 다시 읽는다. 그래프 노드마다 `sig`(노드 파일 크기·시각)가 붙어 UI가 바뀐 노드를 깜빡인다.
 
 ### 6.12 구성 요소 분리 (`components`, v3.9, Q81-A)
-- v3.10(Q82-A): 분리한 요소는 이미지 키(캐릭터·구도·도형·화풍)에서는 프롬프트에 넣지 않는다. 이미지가 아닌 키(`chart_style` 등)에서만 원본과 함께 첨부된다. 분리·저장·미리보기 기능은 그대로.
+- v3.10(Q82-A): 분리한 요소는 이미지 키(차트·도식·캐릭터·구도·도형·화풍)에서는 프롬프트에 넣지 않는다. 이미지가 아닌 키(`palette` 등)에서만 원본과 함께 첨부된다. 분리·저장·미리보기 기능은 그대로.
 - `normalize(raw, parts, size)`: 저장 형식으로 정리하고 문제를 돌려준다. 알 수 없는 `part`·잘못된 이름(영문 소문자-하이픈)·box 없는 캐릭터/도형은 빼고 경고, 이름이 겹치면 `-2`를 붙인다. box가 이미지 밖이면 경고만(자를 때 맞춤). 로더가 부르고, 문제는 노드 이슈(warning).
 - 그리기(결정적): `crop_image`(box 자르기 + 흰 여백 4%, 최소 8px), `composition_image`(원본을 흰색과 62% 섞고 `regions` 번호 상자·`flow` 화살표, regions가 없으면 캐릭터·도형 box), `grid_image`(AI용: 20칸 이하가 되는 간격의 선 + 가장자리 좌표 숫자). `ensure`: 원본 크기·수정 시각·요소 목록의 sha1을 `stamp.txt`와 비교해 다를 때만 다시 그린다. 실패하면 False → 조립은 spec 글로 대체.
 - 요청: `build` → `request.json`(`kind: components`, status sent) + `src/<id>.grid.png` + `prompt.md`(`render_request`: 요소별 고르는 법, 좌표 규칙, 다시 그릴 수 있는 spec 쓰는 법, 추출 색, 지금 있는 요소, `plan.yaml` 형식; 에이전트는 절대 경로를 받고 `out/plan.yaml`에 직접 씀). 로컬 AI `run_for(kind: components)`는 에이전트용 프롬프트를 `prompt-local.md`에 쓴다.
@@ -397,7 +397,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 
 | 방향 | 형식 | 만드는 곳 |
 |---|---|---|
-| 앱 → AI (작업) | `prompt.md` + 레퍼런스 원본 (+ 경로 텍스트) | `engine.package` |
+| 앱 → AI (작업) | `prompt.md` + 레퍼런스 원본 (+ 경로 텍스트). 삽화·차트·도식은 ChatGPT 웹에 ImageGen 지시, 다른 대상에 ImageGen 요청서 | `engine.package` |
 | 앱 → AI (파일 등록) | 작성 프롬프트 (+ `extract.py`, 원본) | `authoring.build` |
 | 앱 → AI (폴더 요청) | 가이드 프롬프트 + `plan.yaml` 규격 (+ 시트·묶음) | `folder_requests.package` |
 | 앱 → AI (구성 요소 분리) | 분리 요청 프롬프트 + 원본 + 좌표 격자 사본 → `plan.yaml`의 `components` | `components.build` |
@@ -445,8 +445,8 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 | `test_local_ai.py` | 로컬 AI 도구: 찾기(직접 경로)·버전·연결 시험, 실행 → 결과 파일 → 정리 미리보기, 결과 파일이 없으면 failed, Codex 읽기 전용 인자·표준 출력 plan과 인라인 파일의 요청 경로 검사. 가짜 도구 사용 |
 | `test_skills.py` | 도구 스킬 설치(다시 해도 같음), 세트 → 스킬 컴파일(이식 가능한 프런트매터·결정성), 내보내기·고친 흔적 감지·제거, 다른 스킬은 덮어쓰지 않고 읽기만 |
 | `test_standards.py` | 스킬 노드 보관·붙이기·조립, 표준 찾기·`cli.py standard`, 설치된 스킬 가져오기(원래 끄기), 스킬 폴더를 노드에 놓기, AI가 부르게 하기(개인 스킬·전역 지침 줄), 원칙으로 풀기 요청, 스킬 휴지통(폴더째) |
-| `test_components.py` | 구성 요소(이미지가 아닌 키 `chart_style`로): 메타 정리·경고, 원본 + 요소 첨부 렌더·파일 생성, 결정성(같은 PNG·프롬프트), 이미지 키는 요소 없이 원본만, `ref:<id>#<요소>`·없는 요소 오류, 덜어내기(요소 먼저 글로), 요소 없으면 프롬프트 그대로, 요청 왕복(격자·붙여넣기·상자 수정·반영·다른 필드 보존), 기존 요소 바꾸기 기본 꺼짐·에이전트 경로, zip → `case: components`, 사람 수정 저장, 스킬 내보내기에 요소 포함 |
-| `test_v310.py` | 이미지 키(Q82-A): 규칙 단락·spec·ref check·우선순위 문장 없음, ImageGen판(chatgpt_web)·요청서판(claude_desktop·codex), 비슷한 원본 양방향·중복·원본 없는 것 제외, 원본 없음 경고, 덜어내기(비슷한 원본 먼저, 글·시트 변환 없음), 이미지 키 없으면 단락 없음, 옛 기본값 대비·사용자 `image: true` 키, 결정성 |
+| `test_components.py` | 구성 요소(이미지가 아닌 키 `palette`로): 메타 정리·경고, 원본 + 요소 첨부 렌더·파일 생성, 결정성(같은 PNG·프롬프트), 이미지 키는 요소 없이 원본만, `ref:<id>#<요소>`·없는 요소 오류, 덜어내기(요소 먼저 글로), 요소 없으면 프롬프트 그대로, 요청 왕복(격자·붙여넣기·상자 수정·반영·다른 필드 보존), 기존 요소 바꾸기 기본 꺼짐·에이전트 경로, zip → `case: components`, 사람 수정 저장, 스킬 내보내기에 요소 포함 |
+| `test_v310.py` | 이미지 키(Q82-A): 규칙 단락·spec·ref check·우선순위 문장 없음, ImageGen판(chatgpt_web)·요청서판(claude_desktop·codex), 차트·도식 참조와 SVG·코드 금지, 비슷한 원본 양방향·중복·원본 없는 것 제외, 원본 없음 경고, 덜어내기(비슷한 원본 먼저, 글·시트 변환 없음), 이미지 키 없으면 단락 없음, 옛 기본값 대비·사용자 `image: true` 키, 결정성 |
 | `test_embed.py` | 뜻 검색(가짜 인코더): 꺼져 있으면 키워드 검색 그대로·인코더 안 부름, 켜면 낱말이 안 겹쳐도 뜻으로 찾고 관계없는 것은 뺌·결정성, 벡터 캐시·바뀐 조각만 다시 계산·`index`의 정리, 참고 예시에 반영, 인코더 오류 시 키워드로, 모델 없으면 켜도 키워드 |
 | `test_console.py` | `am` set·unset·undo(본문 보존), 명령 전 변경과 명령 변경을 따로 커밋(출처·이름), use·inherit·순환 거부, new·rename·기록의 actor, 오류, 명령줄 연결(`cli.py set`·`standard`), 파일 서명, `.claude/settings.json` 합치기(사용자 항목 유지·깨진 JSON 보존), `am` 실행 파일, POSIX pty 세션(환경·한글 입출력·1개 제한·종료) |
 | `test_render_web.py` | Chromium 렌더링은 기본 꺼짐이고 설정에서 켜고 끌 수 있음, Playwright 버전과 맞는 Chromium이 없으면 준비 안 됨 + 다시 받으라는 `reason`, 실행 성공은 기억(headless로 한 번만 띄움), 꺼져 있으면 HTML 추출이 브라우저를 띄우지 않음 (브라우저는 모의) |
