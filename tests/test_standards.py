@@ -1,5 +1,6 @@
 """v3.7 스킬을 라이브러리에 보관·연결 (Q78-A), 작업 → 표준 찾기, AI가 Assets Manager를 부르게 하기."""
 import os
+import json
 import shutil
 import subprocess
 import sys
@@ -86,6 +87,21 @@ class StandardsTests(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn("네이버 블로그 포스팅", p.stdout)
         self.assertIn("## 진행 방식", p.stdout)
+
+    def test_cli_lookup_does_not_write_or_replace_package(self):
+        old_prompt = write(self.d, ".assets/drops/blog/codex/prompt.md", "keep this package")
+        self.assertFalse(os.path.exists(os.path.join(self.d, "_defaults")))
+        p = subprocess.run([sys.executable, CLI, "--root", self.d, "standard", "블로그 글 써줘",
+                            "--lookup", "--json"], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        res = json.loads(p.stdout)
+        self.assertEqual(res["set"], "blog")
+        self.assertEqual(res["candidates"][0]["id"], "blog")
+        self.assertNotIn("files", res)
+        self.assertNotIn("## 진행 방식", res["text"])
+        with open(old_prompt, encoding="utf-8") as f:
+            self.assertEqual(f.read(), "keep this package")
+        self.assertFalse(os.path.exists(os.path.join(self.d, "_defaults")))
 
     def test_import_installed_skill_disables_original(self):
         src = write(self.home, ".claude/skills/tone-guide/SKILL.md", "---\nname: tone-guide\ndescription: 말투 지침\n---\n존댓말\n")

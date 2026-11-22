@@ -91,8 +91,9 @@ def library_signature(root: str) -> str:
 
 
 class Library:
-    def __init__(self, root: str):
+    def __init__(self, root: str, read_only: bool = False):
         self.root = os.path.abspath(root)
+        self.read_only = read_only
         self.load()
 
     # ------------------------------------------------------------------ 로더
@@ -106,7 +107,8 @@ class Library:
                     shutil.copy2(os.path.join(BUNDLED_DEFAULTS, name), os.path.join(dst, name))
 
     def load(self) -> None:
-        self.ensure_defaults()
+        if not self.read_only:
+            self.ensure_defaults()
         self.nodes: dict[str, dict] = {}
         self.issues: list[dict] = []  # {level: error|warning, node, message}
         self.keys = self._read_yaml("_defaults/keys.yaml").get("keys", {}) or {}
@@ -201,6 +203,8 @@ class Library:
 
     def _read_yaml(self, rel: str) -> dict:
         path = os.path.join(self.root, rel)
+        if self.read_only and not os.path.exists(path) and rel.startswith("_defaults/"):
+            path = os.path.join(BUNDLED_DEFAULTS, os.path.basename(rel))
         if not os.path.exists(path):
             return {}
         with open(path, encoding="utf-8") as f:

@@ -58,8 +58,8 @@ def agent_target(lib: Library) -> str:
     return next(iter(lib.targets))
 
 
-def standard(lib: Library, task: str, set_id: str | None = None, gate: bool | None = None) -> dict:
-    """맞는 세트를 골라 경로 포함 프롬프트로 조립한다. 맞는 게 없으면 전역 원칙(있으면)으로."""
+def lookup(lib: Library, task: str, set_id: str | None = None) -> dict:
+    """파일을 만들지 않고 작업에 맞는 세트와 다른 후보를 돌려준다."""
     cands = find(lib, task) if not set_id else []
     chosen = set_id or (cands[0]["id"] if cands else None)
     fallback = False
@@ -69,6 +69,24 @@ def standard(lib: Library, task: str, set_id: str | None = None, gate: bool | No
             chosen, fallback = "global", True
     if not chosen:
         return {"found": False, "text": "맞는 작업 표준이 없습니다. 평소대로 진행하세요.", "candidates": []}
+    if chosen not in lib.nodes or lib.nodes[chosen]["type"] != "rule":
+        return {"found": False, "text": f"표준을 찾지 못했습니다: {chosen}", "candidates": cands}
+    title = lib.nodes[chosen]["title"]
+    lines = [f"표준: {title} ({chosen})"]
+    if fallback:
+        lines.append("맞는 세트가 없어 내 전역 원칙을 선택했습니다.")
+    elif len(cands) > 1:
+        lines.append("다른 후보: " + ", ".join(f"{c['title']} ({c['id']})" for c in cands[1:4]))
+    return {"found": True, "set": chosen, "title": title, "fallback": fallback,
+            "candidates": cands, "text": "\n".join(lines)}
+
+
+def standard(lib: Library, task: str, set_id: str | None = None, gate: bool | None = None) -> dict:
+    """맞는 세트를 골라 경로 포함 프롬프트로 조립한다. 맞는 게 없으면 전역 원칙(있으면)으로."""
+    result = lookup(lib, task, set_id)
+    if not result["found"]:
+        return result
+    chosen, fallback, cands = result["set"], result["fallback"], result["candidates"]
     try:
         pkg = lib.package(chosen, agent_target(lib), write=True, task=task, gate=gate)
     except (KeyError, CycleError) as e:
