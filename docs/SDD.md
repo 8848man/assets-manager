@@ -92,8 +92,8 @@
 | `core/local_ai.py` | 로컬 AI 도구 찾기·설정·실행. Codex는 읽기 전용, stdout plan을 요청 작업장에 저장(Q85) | `detect`, `status`, `update_config`, `test`, `run_for`, `start`, `_save_stdout_plan`, `get_job`, `cancel` | `folder_requests`, `tidy`, `authoring`(지연 import) |
 | `core/skills.py` | 스킬 연동: 도구 스킬 `assets-manager` 설치(시작 때), 세트 → 스킬 컴파일·내보내기(라이브러리 안/개인 폴더 × `.claude/skills`/`.agents/skills`)·고친 흔적 감지·제거, 설치된 스킬 읽기 → 그래프 노드 | `install_tool_skill`, `compile_set`, `status`, `export`, `remove`, `scan`, `graph_part` | `engine` |
 | `skills/assets-manager/` | 앱 번들 도구 스킬(SKILL.md + references/ + 설치 때 scripts/extract.py) | | |
-| `core/standards.py` | 작업 설명 → 맞는 세트 찾기(`find`, 결정적 점수: 제목·본문·규칙 값·붙은 스킬)·조립(`standard`, 맞는 것이 없으면 `global`) | `find`, `standard` | `engine`, `search.grams` |
-| `core/cli.py` | 명령줄 입구: `standard "<작업>" [--set] [--no-gate] [--json]`, `sets`, `assemble <id>`. 다른 프로젝트의 AI가 스킬처럼 부름. 그 밖의 명령은 `console.run`으로(`AM_ACTOR` 환경 변수 = 기록의 actor, 기본 `cli`) | `main` | `standards`, `console` |
+| `core/standards.py` | 작업 설명 → 맞는 세트 찾기(`find`, 결정적 점수: 제목·본문·규칙 값·붙은 스킬)·쓰기 없는 선택(`lookup`)·조립(`standard`, 맞는 것이 없으면 `global`) | `find`, `lookup`, `standard` | `engine`, `search.grams` |
+| `core/cli.py` | 명령줄 입구: `standard "<작업>" [--set] [--no-gate] [--json] [--lookup]`, `sets`, `assemble <id>`. `--lookup`은 선택된 표준과 후보만 반환. 그 밖의 명령은 `console.run`으로(`AM_ACTOR` 환경 변수 = 기록의 actor, 기본 `cli`) | `main` | `standards`, `console` |
 | `core/console.py` | `am` 노드 명령(v3.8): 보기(ls/show/find/standard), 바꾸기(inherit/use/unuse/set/unset/rename/new), undo, tidy 요청. 콘솔 탭·명령줄·AI 탭이 같은 명령을 쓴다 | `run`, `run_line`, `undo`, `HELP` | `engine`, `folder_requests`, `store`, `standards`, `tidy` |
 | `core/terminal.py` | AI 탭 터미널 세션(v3.8): Windows ConPTY(pywinpty)·POSIX pty, 출력 고리 버퍼, 긴 폴링 읽기, 크기 조절, 종료. `am` 실행 파일(`.assets/bin`), 라이브러리 `.claude/settings.json` 권한 합치기 | `start`, `Session`(`read`, `write`, `resize`, `close`), `close_all`, `write_shims`, `ensure_permissions` | `local_ai`(도구 경로), pywinpty(Windows) |
 | `core/export_cmd.py` | AI 대화창에 붙여넣는 내보내기 명령 (노드별: 요청 생성 / 일반: `@target`) | `build` | `folder_requests` |
@@ -107,7 +107,7 @@
 | `ui/compare.html` · `compare.js` | 두 프롬프트 버전의 결과와 골든 샘플을 출처를 가리고 비교(Q87) | `candidate`, `shuffle` | 브라우저 FileReader·Web Crypto |
 | `src-tauri/src/main.rs` | 셸, `app/` 폴더 찾기, 사이드카 실행(`py` → `python` 순서), 종료 처리 | `find_app_dir`, `spawn_server` | tauri 2, tauri-plugin-drag 2 |
 | `defaults/` | 앱 번들 기본값 (`keys.yaml`, `targets.yaml`, `defaults.md`) — 라이브러리에 없으면 복사 | | |
-| `tests/` | 단위·통합 테스트 113개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
+| `tests/` | 단위·통합 테스트 114개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
 
 ## 5. 데이터 모델
 
@@ -276,6 +276,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 - **붙이기** `skills.attach`: 규칙 노드 프런트매터 `uses`에 추가/제거(`backup_sync` 먼저).
 - **원칙으로 풀기**: `tidy.build(goal={kind: skill_to_principle, skill})` — 정리 요청에 스킬 본문과 "규칙형만 원칙으로, 절차·스크립트가 남으면 스킬 유지" 목표를 넣는다. 결과는 일반 하위 정리 미리보기(프롬프트 비교 포함).
 - **호출** `standards.standard(task)`: `find`로 세트 점수(제목 4, 본문 2, 붙은 스킬 1.5, 규칙 값 1, 단어 일치 2배, 동점은 id) → 최고 세트를 에이전트 대상으로 `package(task=작업)` → 경로 포함 프롬프트 + 머리말(선택된 세트, 다른 후보). 없으면 `global`. 입구: `cli.py standard`, MCP `standard`, 도구 스킬 1장.
+- **쓰기 없는 조회** `cli.py standard "<작업>" --lookup [--json]`: `Library(read_only=True)`가 없는 기본값 파일은 번들에서 읽고 디스크에 복사하지 않는다. `standards.lookup`은 선택된 세트·후보·전역 원칙 대체 여부만 반환한다. `package`를 호출하지 않아 `.assets/drops/`의 기존 파일을 지우거나 새 첨부 경로를 만들지 않는다. 실제 프롬프트와 첨부가 필요하면 기존 `standard`를 별도로 호출한다(ISSUE-050).
 - **AI가 부르게 하기** `skills.caller_apply`: 도구 스킬(경로를 채운 SKILL.md)을 개인 `~/.claude/skills`·`~/.agents/skills`에 설치, 또는 `~/.claude/CLAUDE.md`·`~/.codex/AGENTS.md`에 `<!-- assets-manager:start -->…end` 블록 한 줄. 블록 밖은 건드리지 않는다.
 
 ### 6.11 콘솔과 AI 탭 (v3.8, Q79-A·Q80-A)
@@ -444,7 +445,7 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 
 | `test_local_ai.py` | 로컬 AI 도구: 찾기(직접 경로)·버전·연결 시험, 실행 → 결과 파일 → 정리 미리보기, 결과 파일이 없으면 failed, Codex 읽기 전용 인자·표준 출력 plan과 인라인 파일의 요청 경로 검사. 가짜 도구 사용 |
 | `test_skills.py` | 도구 스킬 설치(다시 해도 같음), 세트 → 스킬 컴파일(이식 가능한 프런트매터·결정성), 내보내기·고친 흔적 감지·제거, 다른 스킬은 덮어쓰지 않고 읽기만 |
-| `test_standards.py` | 스킬 노드 보관·붙이기·조립, 표준 찾기·`cli.py standard`, 설치된 스킬 가져오기(원래 끄기), 스킬 폴더를 노드에 놓기, AI가 부르게 하기(개인 스킬·전역 지침 줄), 원칙으로 풀기 요청, 스킬 휴지통(폴더째) |
+| `test_standards.py` | 스킬 노드 보관·붙이기·조립, 표준 찾기·`cli.py standard`·쓰기 없는 `--lookup`(기존 패키지와 기본값 파일 보존), 설치된 스킬 가져오기(원래 끄기), 스킬 폴더를 노드에 놓기, AI가 부르게 하기(개인 스킬·전역 지침 줄), 원칙으로 풀기 요청, 스킬 휴지통(폴더째) |
 | `test_components.py` | 구성 요소(이미지가 아닌 키 `palette`로): 메타 정리·경고, 원본 + 요소 첨부 렌더·파일 생성, 결정성(같은 PNG·프롬프트), 이미지 키는 요소 없이 원본만, `ref:<id>#<요소>`·없는 요소 오류, 덜어내기(요소 먼저 글로), 요소 없으면 프롬프트 그대로, 요청 왕복(격자·붙여넣기·상자 수정·반영·다른 필드 보존), 기존 요소 바꾸기 기본 꺼짐·에이전트 경로, zip → `case: components`, 사람 수정 저장, 스킬 내보내기에 요소 포함 |
 | `test_v310.py` | 이미지 키(Q82-A): 규칙 단락·spec·ref check·우선순위 문장 없음, ImageGen판(chatgpt_web)·요청서판(claude_desktop·codex), 차트·도식 참조와 SVG·코드 금지, 비슷한 원본 양방향·중복·원본 없는 것 제외, 원본 없음 경고, 덜어내기(비슷한 원본 먼저, 글·시트 변환 없음), 이미지 키 없으면 단락 없음, 옛 기본값 대비·사용자 `image: true` 키, 결정성 |
 | `test_embed.py` | 뜻 검색(가짜 인코더): 꺼져 있으면 키워드 검색 그대로·인코더 안 부름, 켜면 낱말이 안 겹쳐도 뜻으로 찾고 관계없는 것은 뺌·결정성, 벡터 캐시·바뀐 조각만 다시 계산·`index`의 정리, 참고 예시에 반영, 인코더 오류 시 키워드로, 모델 없으면 켜도 키워드 |

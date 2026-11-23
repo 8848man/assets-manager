@@ -1,6 +1,7 @@
 """Assets Manager 명령줄 (v3.7). 다른 프로젝트의 AI가 스킬처럼 부르는 입구.
 
   python cli.py standard "<작업 한 줄>" [--set <id>] [--no-gate]   맞는 표준을 찾아 조립된 지침 출력
+  python cli.py standard "<작업 한 줄>" --lookup                   파일을 만들지 않고 표준만 조회
   python cli.py sets                                                세트 목록
   python cli.py assemble <id> [--task "..."]                        특정 노드를 조립
   python cli.py <am 명령> ...                                       노드 보기·바꾸기 (python cli.py help)
@@ -45,14 +46,16 @@ def main(argv=None) -> int:
     s.add_argument("--set")
     s.add_argument("--no-gate", action="store_true")
     s.add_argument("--json", action="store_true")
+    s.add_argument("--lookup", action="store_true", help="파일을 만들지 않고 선택된 표준과 후보만 출력")
     sub.add_parser("sets")
     a = sub.add_parser("assemble")
     a.add_argument("id")
     a.add_argument("--task", default="")
     args = ap.parse_args(argv)
-    lib = Library(os.path.abspath(args.root))
+    lib = Library(os.path.abspath(args.root), read_only=args.cmd == "standard" and args.lookup)
     if args.cmd == "standard":
-        res = standards.standard(lib, args.task, args.set, False if args.no_gate else None)
+        res = (standards.lookup(lib, args.task, args.set) if args.lookup else
+               standards.standard(lib, args.task, args.set, False if args.no_gate else None))
         print(json.dumps(res, ensure_ascii=False, indent=1) if args.json else res["text"])
         return 0 if res["found"] else 1
     if args.cmd == "sets":

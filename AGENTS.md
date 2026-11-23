@@ -38,12 +38,13 @@
 ## 명령
 ```
 # 라이브러리 루트(app의 상위)에서
-python -m unittest discover -s app/tests     # 테스트 (113개, 선택 기능 2개는 환경에 따라 건너뜀)
+python -m unittest discover -s app/tests     # 테스트 (114개, 선택 기능 2개는 환경에 따라 건너뜀)
 python app/core/server.py                    # 서버 → http://127.0.0.1:8765
 python app/core/extract.py <파일>             # 결정적 값 추출
 python app/core/rag.py                       # RAG JSONL 내보내기
 python app/core/mcp_server.py                # MCP 서버 (stdio)
 python app/core/cli.py standard "<작업>"        # 작업에 맞는 표준 조립 (다른 AI가 부르는 입구)
+python app/core/cli.py standard "<작업>" --lookup  # 파일을 만들지 않고 선택된 표준과 후보만 조회
 python app/core/cli.py help                  # am 노드 명령 (서버 실행 뒤에는 .assets/bin/am 으로도)
 cd app && npm run dev                        # 데스크톱 앱 (Rust ≥ 1.90)
 ```
