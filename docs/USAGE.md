@@ -26,7 +26,7 @@
 
 ## 0) 한 번에 실행: `start.bat`
 
-라이브러리 폴더(`D:\projects\assets`)의 **`start.bat`를 더블클릭**하면 됩니다.
+라이브러리 폴더(`D:\projects\assets_manager`)의 **`start.bat`를 더블클릭**하면 됩니다.
 Python 찾기, 처음 한 번 패키지 설치, 앱 실행(서버는 앱이 알아서 띄우고 끔)까지 모두 처리합니다.
 
 | 명령 | 하는 일 |
@@ -35,12 +35,12 @@ Python 찾기, 처음 한 번 패키지 설치, 앱 실행(서버는 앱이 알�
 | `start.bat build` | 바로 실행되는 exe를 한 번 만들어 둠(몇 분). 이후 `start.bat`는 즉시 열림 |
 | `start.bat browser` | 서버를 띄우고 브라우저로 엶 |
 
-빌드된 exe(`app\src-tauri\target\release\assets-manager.exe`)는 바탕화면에 바로가기를 만들어 써도 됩니다. 단, 이 PC의 이 폴더 위치를 기준으로 동작합니다(배포용 설치 파일은 3단계).
+빌드된 exe(`app\src-tauri\target\release\assets-manager.exe`)는 바탕화면에 바로가기를 만들어 써도 됩니다. exe는 자기 위치(`app\src-tauri\target\release\`)에서 `app\` 폴더를 찾으므로, 라이브러리 폴더를 옮기거나 이름을 바꿔도 다시 빌드하지 않아도 됩니다(배포용 설치 파일은 3단계).
 
 ## 1) 브라우저 모드로 먼저 확인 (Python만 있으면 됨)
 
 ```powershell
-cd D:\projects\assets
+cd D:\projects\assets_manager
 python -m pip install -r app\requirements.txt
 python app\core\server.py
 ```
@@ -58,7 +58,7 @@ python app\core\server.py
 - WebView2: Windows 10/11에는 기본으로 있습니다
 
 ```powershell
-cd D:\projects\assets\app
+cd D:\projects\assets_manager\app
 npm install
 npm run dev
 ```

@@ -12,11 +12,26 @@ use tauri::{Manager, RunEvent};
 
 struct Sidecar(Mutex<Option<Child>>);
 
+/// server.py가 있는 `app/` 폴더를 찾는다. 배포 단계(3단계)에서 번들 리소스로 바꾼다.
+/// 순서: ① `ASSETS_APP_DIR` ② exe 위치 기준(`app/src-tauri/target/<release|debug>/` → 세 단계 위)
+/// ③ 빌드할 때의 `app/` 경로(`CARGO_MANIFEST_DIR`). ②가 있어 라이브러리 폴더를 옮기거나 이름을 바꿔도
+/// 다시 빌드하지 않고 exe를 바로 실행할 수 있다.
+fn find_app_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("ASSETS_APP_DIR") {
+        return PathBuf::from(dir);
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.ancestors().nth(4) {
+            if dir.join("core").join("server.py").is_file() {
+                return dir.to_path_buf();
+            }
+        }
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
+}
+
 fn spawn_server() -> Option<Child> {
-    // MVP: 개발 폴더 기준으로 server.py를 찾는다. 배포 단계(3단계)에서 번들 리소스로 바꾼다.
-    let app_dir = std::env::var("ASSETS_APP_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."));
+    let app_dir = find_app_dir();
     let script = app_dir.join("core").join("server.py");
     // exe를 직접 더블클릭해도 동작하도록 여러 이름을 차례로 시도한다.
     let candidates: Vec<String> = match std::env::var("ASSETS_PYTHON") {
