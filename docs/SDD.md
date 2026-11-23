@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.16.4 · 기획서 v3.3(+14A~14K) 기준 · 2026-11-18
+앱 버전 0.16.4 · 기획서 v3.3(+14A~14L) 기준 · 2026-11-24
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -105,7 +105,7 @@
 | `core/mcp_server.py` | MCP 서버 (stdio JSON-RPC 2.0, 외부 패키지 없음) | `handle`, `call`, `TOOLS` | `engine`, `search` |
 | `ui/app.js` | 화면 전체 (빌드 단계 없음), 역할별 원칙 나누기 버튼·렌더링 설정(Q75·Q88) | `loadGraph`, `select`, `render*`, `refreshPackage`, `handleDrop`, `openOutcome`, `confirmOutcome`, `copyExport` | Cytoscape·xterm.js 5.5 + addon-fit(번들, `ui/vendor/`), Tauri 전역(`window.__TAURI__`) |
 | `ui/compare.html` · `compare.js` | 두 프롬프트 버전의 결과와 골든 샘플을 출처를 가리고 비교(Q87) | `candidate`, `shuffle` | 브라우저 FileReader·Web Crypto |
-| `src-tauri/src/main.rs` | 셸, 사이드카 실행(`py` → `python` 순서), 종료 처리 | `spawn_server` | tauri 2, tauri-plugin-drag 2 |
+| `src-tauri/src/main.rs` | 셸, `app/` 폴더 찾기, 사이드카 실행(`py` → `python` 순서), 종료 처리 | `find_app_dir`, `spawn_server` | tauri 2, tauri-plugin-drag 2 |
 | `defaults/` | 앱 번들 기본값 (`keys.yaml`, `targets.yaml`, `defaults.md`) — 라이브러리에 없으면 복사 | | |
 | `tests/` | 단위·통합 테스트 113개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
 
@@ -460,7 +460,7 @@ UI는 자동 테스트가 없다. 변경 후 브라우저 모드(`start.bat brow
 - `start.bat`(라이브러리 루트): Python 확인 → 패키지 설치(최초) → (선택) AI 탭용 `pywinpty` 설치, 실패해도 계속 → 8765 포트의 이전 서버 정리 → 빌드된 exe / `npm run dev` / 브라우저 모드. 메시지는 영문만(cmd 한글 파싱 문제).
 - 앱 코드 이력: `app/`에서 `git log`. 코드를 바꾼 작업은 끝날 때 `app/`에서 커밋한다(라이브러리 데이터의 자동 기록과 별개). `main`에 직접 push하지 않고 작업 브랜치 → PR → 사용자 머지 순서로 올린다(`AGENTS.md` "브랜치와 PR").
 - 서버 시작 시 포트가 막혀 있으면 이전 서버에 `/api/shutdown`을 요청하고 인계받는다.
-- exe는 빌드한 PC의 `app/` 경로를 기준으로 사이드카를 찾는다(`CARGO_MANIFEST_DIR`). 다른 PC 배포는 3단계.
+- exe는 `find_app_dir`로 사이드카(`core/server.py`)가 있는 `app/`을 찾는다: `ASSETS_APP_DIR` → exe 위치 기준(`app/src-tauri/target/<release|debug>/`의 세 단계 위, `core/server.py`가 있을 때) → 빌드할 때의 경로(`CARGO_MANIFEST_DIR`). 라이브러리 폴더를 옮기거나 이름을 바꿔도 다시 빌드하지 않아도 된다(2026-11-24). 다른 PC 배포는 3단계.
 
 ## 14. 확장 지점
 

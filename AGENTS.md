@@ -65,7 +65,7 @@ cd app && npm run dev                        # 데스크톱 앱 (Rust ≥ 1.90)
 - 작업 단위마다 브랜치를 push하고 `gh pr create --base main`으로 PR을 만든다. PR 본문에는 바꾼 것, 이유(기획서 `Qnn`·이슈 번호), 테스트 결과, 고친 SDD 절(또는 "SDD 변경 없음(이유)"), 사람이 확인할 것을 쓴다.
 - **머지는 사용자가 한다.** AI는 PR을 만든 뒤 링크와 함께 사용자에게 검토·머지를 요청하고 기다린다. `gh pr merge`, 브랜치 보호 우회, 강제 push(`--force`)를 하지 않는다.
 - 머지 뒤 `main`을 최신화(`git switch main && git pull`)해야 다음 작업을 할 수 있으면, 먼저 사용자에게 PR 머지를 확인하고 최신화한다. 머지되지 않은 PR 위에 다음 작업을 쌓아야 하면 그 사실을 사용자에게 알리고 PR 본문에 의존 관계를 적는다.
-- 라이브러리 루트 저장소(`app/` 밖)는 원격이 없는 로컬 기록용이라 이 규칙의 대상이 아니다.
+- 라이브러리 루트 저장소(`app/` 밖)는 별도 private 저장소 `8848man/assets-manager-library`(`main`)다. 앱이 데이터를 자동 커밋하므로 이 규칙의 대상이 아니다. 루트 문서를 AI가 바꿀 때의 규칙은 루트 `../AGENTS.md`를 따른다.
 - **테스트:** 기능을 바꾸면 `app/tests/`에 테스트를 추가하고 전체를 돌린다. UI는 브라우저 모드로 확인한다.
 - **노드 쓰기는 앱 함수로:** 규칙 노드를 바꾸는 새 기능은 `console`/`folder_requests._set_rule`/`_rewrite_frontmatter`를 쓴다(키 단위, 본문 보존). 라이브러리 `.claude/settings.json`이 `sets/` `principles/` `skills/` 직접 편집을 막으므로, 이 저장소에서 데이터를 고칠 때도 `am`을 쓴다.
 - **리소스:** 백그라운드 프로세스·폴링은 사용자가 연 화면에서만. 새 폴링은 `document.visibilityState`·`hasFocus()`를 확인하고, 서버 쪽 대기는 긴 폴링(조건 변수)으로.
