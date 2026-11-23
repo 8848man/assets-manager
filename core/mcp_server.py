@@ -8,7 +8,7 @@
   assemble(id, task?, target?)         세트의 결정적 조립 프롬프트 (+ 참고 예시)
 
 Claude 데스크톱 설정(claude_desktop_config.json) 예:
-  "mcpServers": { "assets-manager": { "command": "py", "args": ["D:\\\\projects\\\\assets\\\\app\\\\core\\\\mcp_server.py"] } }
+  "mcpServers": { "assets-manager": { "command": "py", "args": ["D:\\\\projects\\\\assets_manager\\\\app\\\\core\\\\mcp_server.py"] } }
 """
 from __future__ import annotations
 

@@ -2,7 +2,7 @@
 
 [← README](../README.md) · 설계 문서: [SDD.md](SDD.md)
 
-이 문서는 설치부터 기능별 사용법까지 자세히 적은 안내입니다. 아래의 `D:\projectsssets`는 작성자 환경의 라이브러리 경로 예시입니다.
+이 문서는 설치부터 기능별 사용법까지 자세히 적은 안내입니다. 아래의 `D:\projects\assets_manager`는 작성자 환경의 라이브러리 경로 예시입니다.
 
 ## 구성
 
@@ -26,7 +26,7 @@
 
 ## 0) 한 번에 실행: `start.bat`
 
-라이브러리 폴더(`D:\projects\assets`)의 **`start.bat`를 더블클릭**하면 됩니다.
+라이브러리 폴더(`D:\projects\assets_manager`)의 **`start.bat`를 더블클릭**하면 됩니다.
 Python 찾기, 처음 한 번 패키지 설치, 앱 실행(서버는 앱이 알아서 띄우고 끔)까지 모두 처리합니다.
 
 | 명령 | 하는 일 |
@@ -40,7 +40,7 @@ Python 찾기, 처음 한 번 패키지 설치, 앱 실행(서버는 앱이 알�
 ## 1) 브라우저 모드로 먼저 확인 (Python만 있으면 됨)
 
 ```powershell
-cd D:\projects\assets
+cd D:\projects\assets_manager
 python -m pip install -r app\requirements.txt
 python app\core\server.py
 ```
@@ -58,7 +58,7 @@ python app\core\server.py
 - WebView2: Windows 10/11에는 기본으로 있습니다
 
 ```powershell
-cd D:\projects\assets\app
+cd D:\projects\assets_manager\app
 npm install
 npm run dev
 ```
