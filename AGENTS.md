@@ -63,6 +63,7 @@ cd app && npm run dev                        # 데스크톱 앱 (Rust ≥ 1.90)
 
 ## 브랜치와 PR (원격 `origin` = GitHub `8848man/assets-manager`, 공개 저장소)
 - **`main`에 직접 커밋하거나 push하지 않는다.** 작업마다 `main`에서 새 브랜치를 만든다. 이름은 `<종류>/<짧은-설명>`(종류: `feat` `fix` `docs` `refactor` `test` `chore`), 예: `fix/api-port-tauri`.
+- **작업 트리:** `app/`은 여러 실행 도구가 함께 쓰는 공용 작업 폴더다. 여기서 `git switch`·`git checkout`으로 브랜치를 바꾸지 않고, `git worktree add <저장소 밖 경로> -b <브랜치> origin/main`으로 자기 작업 트리를 만들어 작업한다. 커밋 직전에는 `git branch --show-current`로 현재 브랜치를 확인한다. 끝난 작업 트리 정리(`git worktree remove`)는 사람에게 확인한다.
 - 작업 단위마다 브랜치를 push하고 `gh pr create --base main`으로 PR을 만든다. PR 본문에는 바꾼 것, 이유(기획서 `Qnn`·이슈 번호), 테스트 결과, 고친 SDD 절(또는 "SDD 변경 없음(이유)"), 사람이 확인할 것을 쓴다.
 - **머지는 사용자가 한다.** AI는 PR을 만든 뒤 링크와 함께 사용자에게 검토·머지를 요청하고 기다린다. `gh pr merge`, 브랜치 보호 우회, 강제 push(`--force`)를 하지 않는다.
 - 머지 뒤 `main`을 최신화(`git switch main && git pull`)해야 다음 작업을 할 수 있으면, 먼저 사용자에게 PR 머지를 확인하고 최신화한다. 머지되지 않은 PR 위에 다음 작업을 쌓아야 하면 그 사실을 사용자에게 알리고 PR 본문에 의존 관계를 적는다.
