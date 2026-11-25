@@ -169,10 +169,12 @@ def restore_version(lib: Library, rel: str, vid: str) -> str:
     return rel
 
 
-def _git(root: str, *args, timeout=20) -> subprocess.CompletedProcess:
+def _git(root: str, *args, timeout=20, env: dict | None = None) -> subprocess.CompletedProcess:
     kw = {}
     if os.name == "nt":
         kw["creationflags"] = 0x08000000  # 콘솔 창 숨김
+    if env is not None:
+        kw["env"] = env
     return subprocess.run(["git", "-c", "user.name=Assets Manager", "-c", "user.email=assets-manager@localhost",
                            "-c", "core.quotepath=false", *args], cwd=root, capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=timeout, **kw)
@@ -312,6 +314,50 @@ def git_commit(root: str, message: str | None = None, checked_at: str | None = N
                 "skipped": skipped, "error": r.stderr.strip() if r.returncode else None}
     except Exception as e:
         return {"available": True, "error": str(e)}
+
+
+def git_remote_status(root: str) -> dict:
+    """원격 대비 앞선(ahead)·뒤진(behind) 커밋 수. 네트워크에 닿지 않는다(마지막으로 받은 원격 정보 기준).
+
+    현재 브랜치에 연결된 원격 브랜치(upstream)가 없으면 {"upstream": None}."""
+    try:
+        st = git_status(root)
+        if not st["available"] or not st["repo"]:
+            return {"upstream": None}
+        up = _git(root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+        if up.returncode:
+            return {"upstream": None}
+        c = _git(root, "rev-list", "--left-right", "--count", "@{u}...HEAD")
+        behind, ahead = (int(x) for x in c.stdout.split())
+        return {"upstream": up.stdout.strip(), "ahead": ahead, "behind": behind}
+    except Exception as e:
+        return {"upstream": None, "error": str(e)}
+
+
+def git_push(root: str, timeout: int = 60) -> dict:
+    """라이브러리 커밋을 원격에 올린다. 사용자가 버튼을 누를 때만 부른다(P3: 외부 전송은 누를 때만).
+
+    강제 push는 하지 않는다. 인증 창·터미널 입력을 기다리지 않도록 프롬프트를 끄고 시간 제한을 둔다."""
+    st = git_remote_status(root)
+    if not st.get("upstream"):
+        return {"ok": False, **st, "error": "원격 저장소가 연결되어 있지 않습니다. 터미널에서 git push -u로 한 번 연결해 주세요."}
+    branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    remote = _git(root, "config", f"branch.{branch}.remote").stdout.strip()
+    merge = _git(root, "config", f"branch.{branch}.merge").stdout.strip()
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}
+    try:
+        r = _git(root, "push", remote, f"HEAD:{merge}", timeout=timeout, env=env)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, **st, "error": f"{timeout}초 안에 끝나지 않았습니다. 인터넷 연결이나 로그인 상태를 확인해 주세요."}
+    after = git_remote_status(root)
+    if r.returncode:
+        out = r.stderr.strip() or r.stdout.strip()
+        if any(k in out for k in ("non-fast-forward", "fetch first", "rejected")):
+            msg = "원격에 이 PC에 없는 커밋이 있어 올리지 않았습니다(강제로 덮어쓰지 않음). 터미널에서 git pull로 합친 뒤 다시 올려 주세요."
+        else:
+            msg = "올리기 실패: " + (out.splitlines()[-1] if out else f"git 종료 코드 {r.returncode}")
+        return {"ok": False, **after, "error": msg, "output": out}
+    return {"ok": True, **after}
 
 
 # ------------------------------------------------------------------ 휴지통

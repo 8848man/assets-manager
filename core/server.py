@@ -38,7 +38,7 @@ import console  # noqa: E402
 import terminal  # noqa: E402
 from engine import library_signature  # noqa: E402
 
-APP_VERSION = "0.16.4"  # UI(app.js)의 APP_VERSION과 같아야 함
+APP_VERSION = "0.16.5"  # UI(app.js)의 APP_VERSION과 같아야 함
 UI_DIR = os.path.join(APP_DIR, "ui")
 LOCK = threading.Lock()
 STATE: dict = {}
@@ -114,6 +114,7 @@ class Handler(BaseHTTPRequestHandler):
                 g["changes"] = lib.changes()
                 g["defaults_updates"] = store.defaults_updates(lib.root)
                 g["backup"] = STATE.get("last_sync", {}).get("git", {})
+                g["remote"] = store.git_remote_status(lib.root) if g["backup"].get("repo") else {"upstream": None}
                 g["trash_count"] = len(store.list_trash(lib.root))
                 g["requests"] = freq.list_requests(lib.root)
                 g["layout"] = read_layout(lib.root)
@@ -244,6 +245,9 @@ class Handler(BaseHTTPRequestHandler):
                 with LOCK:
                     res = console.run_line(root, body.get("line", ""), "user")
                 return self._json(res)
+            if u.path == "/api/git/push":  # 라이브러리 원격 올리기 (사용자가 누를 때만, P3)
+                library(sync=True)  # 밀린 변경을 먼저 커밋
+                return self._json(store.git_push(root))
             if u.path == "/api/term/start":  # v3.8 AI 탭 (사용자가 누를 때만)
                 terminal.ensure_permissions(root)
                 return self._json(terminal.start(root, body.get("tool", "claude"),

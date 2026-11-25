@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.16.4 · 기획서 v3.3(+14A~14L) 기준 · 2026-11-24
+앱 버전 0.16.5 · 기획서 v3.3(+14A~14L) 기준 · 2026-11-26
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -39,6 +39,9 @@
 보충 (v3.12, Q86~Q88):
 - **Q86** — 한 계층에 붙은 두 부품 원칙의 목록 키(`value_type: list`)는 선언 순서대로 합치고 중복을 뺀다. 단일 키 값이 다르면 `RuleConflictError`로 조립을 중단하고 사용자에게 어느 값을 쓸지 묻는다. 상속 계층과 세트 자신의 덮어쓰기는 유지한다.
 - **P3·Q88** — HTML 렌더링용 Playwright·Chromium은 설정 버튼에서만 설치한다. 렌더링은 로컬 HTML을 오프라인·JavaScript 비활성 브라우저에서 읽고, 기능이 꺼져 있으면 기존 정적 추출을 쓴다.
+
+보충 (0.16.5, 라이브러리 원격 올리기):
+- **P3·P5** — 라이브러리 루트 Git의 원격 push는 상단 `원격에 올리기 (N개)` 버튼을 **사용자가 누를 때만** 한다. 자동 커밋 뒤 자동 push, 예약 push는 없다. 앞선 커밋 수는 네트워크 없이 마지막으로 받은 원격 정보로 센다. 강제 push는 하지 않는다(원격이 앞서 있으면 실패를 알리고 사람이 `git pull`로 합친다). 배경: 원격 백업이 4일·15커밋 밀렸던 일(2026-11-26), 루트 `2026-11-26_라이브러리-push-주기-제안.md` B안.
 
 보충 (v3.10, Q82-A):
 - **이미지의 기준은 원본 파일이다.** 이미지 키는 스타일을 글로 넘기지 않는다: 키 지시문·엣지 `note`·레퍼런스 `spec`·`check`·구성 요소·우선순위 문장을 프롬프트에 넣지 않고, 원본(+`similar_to`로 묶인 원본)만 ImageGen 참조로 넘긴다. 사용자가 세트에 쓴 텍스트 값만 "원본과 다르게 할 점"으로 들어간다. 원본이 없으면 글로 대신하지 않고 빼며 경고한다. 덜어내기도 이미지를 글·컨택트 시트로 바꾸지 않는다.
@@ -85,7 +88,7 @@
 | `core/server.py` | HTTP API, 정적 파일, 포트 인계(`/api/shutdown`), 레이아웃 저장 | `Handler`, `library()`, `node_detail`, `handle_drop`(v3.1 호환), `bind` | 모든 core 모듈 |
 | `core/drops.py` | 예상 결과 창: 놓은 것을 분류해 선택지 생성(stage), 실행(commit), 승격, 되돌리기 | `stage`, `commit`, `promote`, `undo`, `OPT` | `folder_requests`, `store` |
 | `core/folder_requests.py` | AI 요청의 수명: 준비 → 패키지 → 결과 수신 → 미리보기 → 적용. 원본 짝 맞추기 | `new_request`, `prepare`, `package`, `render`, `receive_zip`, `attach`, `auto_assign`, `assign`, `preview`, `apply`, `_set_rule` | `extract`, `store` |
-| `core/store.py` | 드롭 히스토리, 버전 보관, Git, 휴지통, 가져오기, 기본값 업데이트 | `append_history`, `read_history`, `backup_sync`, `fresh_files`, `versions_for`, `restore_version`, `git_commit`(라이브러리 데이터만, "기타" 제외), `_unstage`, `commit_message`, `delete_node`, `restore_trash`, `import_items`, `import_zip`, `defaults_updates`, `upgrade_defaults` | git(선택) |
+| `core/store.py` | 드롭 히스토리, 버전 보관, Git, 휴지통, 가져오기, 기본값 업데이트 | `append_history`, `read_history`, `backup_sync`, `fresh_files`, `versions_for`, `restore_version`, `git_commit`(라이브러리 데이터만, "기타" 제외), `git_remote_status`(앞선·뒤진 수, 네트워크 없음), `git_push`(버튼으로만, 강제 없음), `_unstage`, `commit_message`, `delete_node`, `restore_trash`, `import_items`, `import_zip`, `defaults_updates`, `upgrade_defaults` | git(선택) |
 | `core/authoring.py` | 파일 하나·여럿을 AI가 메타로 등록하게 하는 작성 프롬프트 (미등록·기존 노드 다시 쓰기) | `build`, `render` | `extract` |
 | `core/components.py` | 구성 요소 분리(v3.9, Q81-A): 메타 `components` 정리(`normalize`), 잘라 낸 그림·구도 도식 캐시(`ensure`, `.assets/components/`), AI 요청(좌표 격자 사본 + 프롬프트) → 답 받기 → 미리보기(상자 수정 합치기) → 반영, 사람이 고친 요소 저장 | `normalize`, `ensure`, `crop_image`, `composition_image`, `grid_image`, `build`, `render_request`, `receive`, `preview`, `apply`, `save`, `open_request` | `folder_requests`, `store`, `tidy.parse_plan_text`, Pillow |
 | `core/tidy.py` | 하위 정리: 범위(scope)·결정적 진단(diagnose) → AI 요청 프롬프트 → plan(ops) 메모리 시뮬레이션 → 전·후 그래프·변경 이유·프롬프트 비교 → 적용 | `scope`, `diagnose`, `build`, `receive`, `simulate`, `preview`, `apply` | `folder_requests`, `store` |
@@ -335,12 +338,14 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 - 본문: 파일마다 `동작 경로` 한 줄(최대 50줄) + `출처: 폴더 변경 감지[ (확인 시점)] | 앱 동작`.
 - 앱 동작 문구(`backup_sync(lib, message)`: "놓기: …", "콘솔: …", "하위 정리 …" 등)는 제목 앞에 붙는다. **동작이 끝난 뒤** 그 동작이 만든 변경을 기록할 때만 준다. 동작 전·앱 시작 때 그때까지의 변경을 쓸어 담는 호출은 `message` 없이 `checked_at`("앱 시작 때 확인", "콘솔 명령 전 확인", "콘솔 되돌리기 전 확인")만 주어, 사람이 만든 변경에 앱 동작 이름이 붙지 않는다(0.16.3). 0.16.2까지는 "Assets Manager 시작", "콘솔 전: …"이 동작 전 쓸어 담기에 붙었다. 0.14.0까지의 커밋은 "자동 기록: 변경 N개 (폴더 변경 감지)"였고, 지난 이력은 고치지 않는다.
 
+라이브러리 원격 올리기 (0.16.5): `GET /api/graph`의 `remote`는 `store.git_remote_status` 결과 `{upstream, ahead, behind}`(현재 브랜치의 upstream 기준 `rev-list --left-right --count`, fetch 없음, upstream이 없으면 `{upstream: null}`). `POST /api/git/push`는 먼저 `library(sync=True)`로 밀린 변경을 커밋한 뒤 `store.git_push`를 부른다: `branch.<현재>.remote`·`.merge`로 `git push <remote> HEAD:<merge>`(강제 없음), `GIT_TERMINAL_PROMPT=0`·`GCM_INTERACTIVE=never`, 시간 제한 60초. 거절(non-fast-forward)이면 "강제로 덮어쓰지 않음" 안내와 함께 `ok: false`. 버전 보관(`history/versions/`)·휴지통은 `.gitignore` 대상이라 원격에 올라가지 않는다.
+
 ## 8. HTTP API (`core/server.py`, 127.0.0.1:8765)
 
 | 메서드 · 경로 | 용도 |
 |---|---|
 | GET `/api/health` | 버전·pid (UI가 버전 불일치 감지) |
-| GET `/api/graph` | 노드·엣지·이슈·대상·변경·기본값 업데이트·요청·레이아웃 (버전 보관·Git 동기화 포함) |
+| GET `/api/graph` | 노드·엣지·이슈·대상·변경·기본값 업데이트·요청·레이아웃·원격 상태 `remote` (버전 보관·Git 동기화 포함) |
 | GET `/api/node/<id>` | 상세 (조립, 버전, 히스토리, 산출물 목록, 추출 값) |
 | GET `/api/package/<id>?target&trim&strip&all&task&gate` | 드롭 패키지 (`gate=1|0`은 이번만 덮어씀, 결과에 `gate`·`set_gate`) |
 | GET `/api/authoring?files=a|b&target&note` | 작성 프롬프트 패키지 |
@@ -369,6 +374,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 | POST `/api/skills/export` {set, scope: library\|personal, agents: [claude, agents], overwrite} · `/api/skills/remove` {set, scope, agents, force} | 내보내기(고친 흔적·다른 스킬이 있으면 `conflicts`+diff로 멈춤) · 제거(앱이 쓴 파일만) |
 | POST `/api/skills/import` {path, node?, disable_original} · `/attach` {skill, node, detach?} · `/restore-original` {skill} | 설치된 스킬을 라이브러리로 가져오기(원래 SKILL.md는 `SKILL.md.disabled-by-assets-manager`로) · 붙이기/떼기 · 원래 스킬 되살리기 |
 | GET `/api/caller` · POST `/api/caller` {item: skill_claude\|skill_agents\|rule_claude\|rule_codex, action: install\|remove} | AI가 Assets Manager를 부르게 하기: 개인 스킬 설치, 전역 지침 한 줄(표시 블록 사이에만 씀, 처음 고치기 전 `.assets-manager.bak`) |
+| POST `/api/git/push` | 라이브러리 커밋을 원격에 올리기(사용자가 누를 때만, 강제 없음) → `{ok, upstream, ahead, behind, error?}` (0.16.5) |
 | POST `/api/console` {line} | `am` 한 줄 실행 → `{code, output, changed}` (v3.8) |
 | GET `/api/changes` | 라이브러리 파일 서명 `{sig}` — UI가 창이 보이고 포커스일 때 2초마다 확인 |
 | GET `/api/term` | AI 탭 사용 가능 여부(`available{ok, hint}`), 세션 목록, `max_ai`, `idle_hint` |
@@ -420,6 +426,7 @@ Codex 읽기 전용 실행(Q85)은 최종 표준 출력의 YAML 코드 블록에
 - 세트 상세의 `역할별로 나누기`(Q75)는 같은 정리 창을 `goal=roles`로 열어 역할별 원칙 분리안을 받고 동일한 미리보기·적용을 사용한다. 상단 `블라인드 비교`(Q87)는 별도 `compare.html`에서 두 버전과 골든 샘플을 출처를 가리고 비교한다.
 
 - 구성 요소(v3.9): 이미지 레퍼런스 상세의 `compsHtml`(요소 카드: 잘라 낸 그림, 종류, 설명, 점검, `ref:<id>#<요소>` 복사, 빼기 / `AI로 나누기`·`상자 고치기`). 창 `#comp-dialog`: `openComponents`(열린 요청에 답이 있으면 바로 미리보기) → `renderCompRequest`(대상 선택, 로컬 AI, 끌어 놓기 손잡이 = 프롬프트+원본+격자 사본, 요청 복사, 답 붙여넣기) → `showCompPreview`(상자 편집기 `boxEditorHtml`/`bindBoxEditor`: 끌어 옮기기·모서리로 크기, 놓으면 바뀐 것만 `preview`에 보내 다시 그림 / 요소 카드 체크 → 반영). `editComponents`는 같은 편집기로 반영된 요소를 고쳐 바로 저장. 세트 규칙 표의 레퍼런스 칸에 `+ 요소 N개`. 놓은 zip이 분리 답이면 `case: components`로 미리보기를 연다.
+- 원격 올리기(`#push-btn`, 상단 Git 상태 칩 옆): `renderTopbar`가 `g.remote.ahead > 0`이고 upstream이 있을 때만 `원격에 올리기 (N개)`로 보인다. 누르면 `pushLibrary` → `POST /api/git/push` → 결과 토스트 → `loadGraph` (0.16.5).
 - 콘솔 패널(`#console-panel`, 상단 `콘솔` 버튼·Ctrl+\`): 아래쪽, 높이 끌어 조절(localStorage `am.consoleH`). 처음 열 때 xterm을 만든다(`conInit`). **콘솔 탭**은 앱 안 줄 편집기(`conConsoleInput`: ←→ Home End, ↑↓ 기록 200줄, Tab 명령·노드 id 완성, Ctrl+C·L·U, 여러 줄 붙여넣기, 한글 폭 2칸 계산) → `POST /api/console` → 출력 → 바뀐 노드가 있으면 `conRefresh`. **AI 탭**(`+ AI` 선택 → `conAddAI`)은 xterm ↔ `/api/term/*`(입력 8ms 모아 보내기, 긴 폴링 `conReadLoop`, 창 크기 `fit`). 탭 × = 프로세스 종료. 스크롤백 5000줄.
 - 실시간 반영: `conPoll`이 창이 보이고 포커스일 때 2초(아니면 4초, 요청 없음)마다 `/api/changes` → 서명이 바뀌면 `conRefresh`(대화상자가 열려 있으면 닫힌 뒤) → `loadGraph` 후 노드 `sig`가 달라진 노드에 `.flash`(2.4초).
 - 상태: 전역 `state` (graph, cy, selected, target, authorTarget, pkg, opts, tasks, outcome, request, requestPkg). 사용자 편의 설정만 localStorage(`am.*`).
@@ -439,7 +446,7 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 | 파일 | 다루는 것 |
 |---|---|
 | `test_engine.py` | 기본값 복사, 다중 상속, 순환, 동의어, 지시문, 결정성, 덜어내기 3단계, 민감도, 변경 감지, index |
-| `test_v3.py` | 우선순위·점검, 미등록·작성, 가져오기, 히스토리, 버전·휴지통·Git, 자동 커밋 메시지(분류·이름·이름 변경·출처·확인 시점), 루트 문서("기타")는 자동 커밋 제외·설정 파일은 커밋, 기본값 업데이트, fresh |
+| `test_v3.py` | 우선순위·점검, 미등록·작성, 가져오기, 히스토리, 버전·휴지통·Git, 자동 커밋 메시지(분류·이름·이름 변경·출처·확인 시점), 루트 문서("기타")는 자동 커밋 제외·설정 파일은 커밋, 원격 상태·올리기(원격 없음, 앞선 수, 성공, 원격이 앞서면 강제 없이 실패), 기본값 업데이트, fresh |
 | `test_requests.py` | 폴더 요청: 준비, 시트·묶음, 결과 미리보기·적용, 덮어쓰기, 잘못된 plan |
 | `test_v33.py` | 검색, 참고 예시·덜어내기, stage 선택지, commit(산출물·원본·변형·골든·승격·되돌리기), 요청 없는 zip·`@target`·짝 맞추기, 내보내기 명령, RAG, MCP(stdio 실제 프로세스), 노드 종류별 자동 연결, 개발 착수 프리셋 조립, `uses` 조립 순서, 하위 정리 왕복(프롬프트 동일·쓰이는 노드 휴지통 거부·값 변경 감지), 승인 게이트·작업 대기 끝 단락 |
 

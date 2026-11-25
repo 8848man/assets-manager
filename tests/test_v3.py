@@ -237,6 +237,52 @@ class V3Test(unittest.TestCase):
         self.assertFalse(any(u["file"] == "keys.yaml" for u in store.defaults_updates(self.root)))
         self.assertIn("character_style", self.lib().keys)
 
+    # ---------------------------------------------------------- 원격 올리기 (버튼으로만)
+    def _git(self, cwd, *args):
+        return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd,
+                              capture_output=True, text=True, encoding="utf-8")
+
+    @unittest.skipUnless(shutil.which("git"), "git 없음")
+    def test_git_remote_status_and_push(self):
+        self.assertIsNone(store.git_remote_status(self.root)["upstream"])  # Git 저장소 아님
+        rule(self.root, "sets/a.md", "a", None, "  tone: x\n")
+        store.backup_sync(self.lib(), "첫 기록")
+        self.assertIsNone(store.git_remote_status(self.root)["upstream"])  # 원격 없음
+        self.assertFalse(store.git_push(self.root)["ok"])
+
+        bare = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, bare, True)
+        self._git(bare, "init", "-q", "--bare")
+        branch = self._git(self.root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        self._git(self.root, "remote", "add", "origin", bare)
+        self._git(self.root, "push", "-q", "-u", "origin", branch)
+        self.assertEqual(store.git_remote_status(self.root), {"upstream": f"origin/{branch}", "ahead": 0, "behind": 0})
+
+        rule(self.root, "sets/a.md", "a", None, "  tone: y\n")
+        store.backup_sync(self.lib(), "두 번째")
+        self.assertEqual(store.git_remote_status(self.root)["ahead"], 1)
+        r = store.git_push(self.root)
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(r["ahead"], 0)
+        self.assertEqual(self._git(bare, "rev-parse", branch).stdout, self._git(self.root, "rev-parse", "HEAD").stdout)
+
+        # 다른 PC가 먼저 올린 경우: 강제로 덮어쓰지 않고 실패를 알린다
+        other = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, other, True)
+        self._git(other, "clone", "-q", bare, ".")
+        with open(os.path.join(other, "x.md"), "w", encoding="utf-8") as f:
+            f.write("x\n")
+        self._git(other, "add", "x.md")
+        self._git(other, "commit", "-q", "-m", "다른 PC")
+        self._git(other, "push", "-q")
+        remote_head = self._git(bare, "rev-parse", branch).stdout
+        rule(self.root, "sets/a.md", "a", None, "  tone: z\n")
+        store.backup_sync(self.lib(), "세 번째")
+        r = store.git_push(self.root)
+        self.assertFalse(r["ok"])
+        self.assertIn("강제로 덮어쓰지 않음", r["error"])
+        self.assertEqual(self._git(bare, "rev-parse", branch).stdout, remote_head)
+
 
 if __name__ == "__main__":
     unittest.main()
