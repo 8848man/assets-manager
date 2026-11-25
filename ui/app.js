@@ -1,5 +1,5 @@
 /* Assets Manager UI — 그래프, 상세 패널, 드롭 영역, AI 작성 흐름, 가져오기, 기록과 되돌리기 (기획서 v3) */
-const APP_VERSION = "0.16.4"; // server.py의 APP_VERSION과 같아야 함
+const APP_VERSION = "0.16.5"; // server.py의 APP_VERSION과 같아야 함
 // Tauri 창(exe의 tauri.localhost, 개발 모드의 127.0.0.1:1430 개발 서버)이면 사이드카 8765,
 // 그 밖(서버가 UI를 직접 내주는 브라우저 모드, 어떤 포트든)은 같은 출처
 const API = window.__TAURI__ ? "http://127.0.0.1:8765" : "";
@@ -214,6 +214,28 @@ function renderTopbar(g) {
   const b = g.backup || {};
   $("#backup").textContent = b.repo ? "Git 기록 중" : b.inside_other ? "버전 보관 (상위 폴더가 Git)" : b.available === false ? "버전 보관 (Git 없음)" : "버전 보관";
   $("#backup").title = b.error ? "Git 오류: " + b.error : "변경은 자동으로 기록되어 되돌릴 수 있습니다";
+  // 원격 올리기: 원격보다 앞선 커밋이 있을 때만 보이고, 누를 때만 push한다 (P3)
+  const rm = g.remote || {};
+  const pb = $("#push-btn");
+  pb.hidden = !(rm.upstream && rm.ahead > 0);
+  pb.textContent = `원격에 올리기 (${rm.ahead || 0}개)`;
+  pb.title = `기록 ${rm.ahead || 0}개가 원격(${rm.upstream || ""})에 아직 없습니다. 누르면 올립니다(강제로 덮어쓰지 않음)`;
+  pb.onclick = pushLibrary;
+}
+
+async function pushLibrary() {
+  const pb = $("#push-btn");
+  pb.disabled = true;
+  pb.textContent = "올리는 중…";
+  try {
+    const r = await post("/api/git/push");
+    toast(r.ok ? "원격에 올렸습니다" : r.error);
+  } catch (e) {
+    toast("올리기 실패: " + e.message);
+  } finally {
+    pb.disabled = false;
+    await loadGraph();
+  }
 }
 
 /* ---------------------------------------------------------------- 상세 패널 */
