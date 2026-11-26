@@ -314,12 +314,17 @@ class PresetTests(unittest.TestCase):
     """번들 프리셋(개발 착수 원칙)이 기본 키 어휘로 경고 없이 조립되는지."""
 
     def test_dev_presets_assemble_without_warnings(self):
-        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        here = os.path.dirname(os.path.abspath(__file__))
+        app_dir = os.path.dirname(here)
+        # app/ 상위가 라이브러리면 실제 프리셋을, 아니면(저장소 밖 git worktree 등) 테스트용 사본을 쓴다.
+        root = os.path.dirname(app_dir)
+        if not all(os.path.isdir(os.path.join(root, sub)) for sub in ("principles", "sets")):
+            root = os.path.join(here, "fixtures", "dev-presets")
         d = tempfile.mkdtemp()
         try:
             for sub in ("principles", "sets"):
                 shutil.copytree(os.path.join(root, sub), os.path.join(d, sub))
-            shutil.copytree(os.path.join(root, "app", "defaults"), os.path.join(d, "_defaults"))
+            shutil.copytree(os.path.join(app_dir, "defaults"), os.path.join(d, "_defaults"))
             lib = Library(d)
             bad = [i for i in lib.issues if i.get("node") in
                    ("dev-design-approval", "dev-docs", "dev-conflict-verify", "dev-workflow",
