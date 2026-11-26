@@ -32,6 +32,7 @@ MAX_FILES = 50
 SUPPORTED = set(store.EXT_TYPE)
 TEXT_EXT = {".html", ".htm", ".css", ".txt", ".md"}
 EXTRACT_PY = os.path.join(APP_DIR, "core", "extract.py")
+COORDINATOR_SKILL_APPROVAL_ENABLED = False
 
 # 문서에서 원칙·결정을 뽑을 때의 공통 안내 (Q71-B). export_cmd도 같은 문장을 쓴다.
 PRINCIPLE_GUIDE = ("자료에 작업 원칙·결정·금지 사항이 있으면 규칙 노드로 만드세요: 주제별로 `principles/<id>.md`(kind: principle)로 나누고, "
@@ -69,6 +70,60 @@ def _save(root: str, req: dict) -> None:
 
 def _sha_bytes(b: bytes) -> str:
     return hashlib.sha1(b).hexdigest()
+
+
+def coordinator_skill_allowed(name: str, draft_sha256: str, allowed_records: set[str] | None = None) -> bool:
+    """Compare a Vault-provided name@draft-hash allowlist; the caller keeps this path disabled."""
+    return f"{name}@{draft_sha256}" in (allowed_records or set())
+
+
+def _skill_create(lib: Library, out: str, c: dict, iid: str, target: str | None) -> dict:
+    """Validate a proposed skill directory without changing the library."""
+    import skills
+
+    path = str(c.get("path") or "").replace("\\", "/").rstrip("/")
+    approval = c.get("approval", "human")
+    owner = target if c.get("uses") == "@target" else c.get("uses")
+    it = {"id": iid, "kind": "create", "node_type": "skill", "path": path,
+          "reason": c.get("reason", ""), "checked": True, "warnings": [],
+          "approval": approval, "uses": owner}
+    parts = path.split("/")
+    src = os.path.realpath(os.path.join(out, *parts))
+    safe_out = os.path.realpath(out)
+    if (len(parts) != 2 or parts[0] != "skills" or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", parts[1])
+            or os.path.commonpath((safe_out, src)) != safe_out or not os.path.isfile(os.path.join(src, "SKILL.md"))):
+        it.update(checked=False, error=f"스킬 폴더가 올바르지 않습니다: {path}")
+        return it
+    for base, dirs, files in os.walk(src):
+        for entry in dirs + files:
+            if os.path.islink(os.path.join(base, entry)):
+                it.update(checked=False, error="스킬 폴더 밖을 가리키는 파일이 있습니다")
+                return it
+    if approval not in ("human", "coordinator"):
+        it.update(checked=False, error=f"승인 주체가 올바르지 않습니다: {approval}")
+        return it
+    with open(os.path.join(src, "SKILL.md"), "rb") as f:
+        raw = f.read()
+    draft_hash = hashlib.sha256(raw).hexdigest()
+    it["draft_sha256"] = draft_hash
+    try:
+        m = FRONTMATTER.match(raw.decode("utf-8-sig"))
+        fm = yaml.safe_load(m.group(1)) if m else None
+        name = str((fm or {}).get("name") or "")
+        if not name or skills.skill_name(name) != parts[1]:
+            raise ValueError("SKILL.md name과 폴더 이름이 다릅니다")
+        it.update(node_id=name, title=name, summary=str((fm or {}).get("description") or ""))
+    except (UnicodeDecodeError, yaml.YAMLError, ValueError) as e:
+        it.update(checked=False, error=f"SKILL.md 형식 오류: {e}")
+        return it
+    if os.path.exists(os.path.join(lib.root, path)) or name in lib.nodes:
+        it.update(checked=False, error=f"스킬 `{name}`이 이미 있습니다")
+    elif not owner or lib.nodes.get(owner, {}).get("type") != "rule":
+        it.update(checked=False, error=f"붙일 규칙 노드가 없습니다: {owner or '@target'}")
+    elif approval == "coordinator" and (not COORDINATOR_SKILL_APPROVAL_ENABLED or
+                                        not coordinator_skill_allowed(name, draft_hash)):
+        it.update(checked=False, error="조율자 승인은 꺼져 있음")
+    return it
 
 
 def library_hashes(lib: Library) -> dict[str, str]:
@@ -307,6 +362,11 @@ def render(lib: Library, req: dict, target: str, agent: bool, note: str, merged:
           "create:                     # 새로 만든 파일 (산출물 1의 경로)",
           "  - path: web/landing.meta.yaml",
           "    reason: ...",
+          "  - type: skill             # SKILL.md가 든 새 폴더; 사람이 미리보기 뒤 승인",
+          "    path: skills/example-skill",
+          "    uses: <붙일 규칙 노드 id 또는 @target>",
+          "    approval: human         # 생략하면 human; coordinator는 현재 적용 불가",
+          "    reason: ...",
           "update:                     # 기존 규칙 노드의 키 추가·변경 (삭제는 불가)",
           "  - node: <기존 규칙 노드 id>",
           "    set_rules:",
@@ -501,7 +561,7 @@ def list_requests(root: str) -> list[dict]:
             if req["status"] == "sent" and os.path.isfile(os.path.join(base, rid, "out", "plan.yaml")):
                 req["status"] = "received"  # 에이전트가 out/에 직접 씀
                 _save(root, req)
-            out.append({k: req.get(k) for k in ("id", "status", "kind", "node", "node_title", "target", "created", "sent")}
+            out.append({k: req.get(k) for k in ("id", "status", "kind", "node", "node_title", "target", "created", "sent", "proposed_skills")}
                        | {"files": len(req["files"])})
     return out
 
@@ -543,6 +603,10 @@ def preview(lib: Library, rid: str) -> dict:
     for i, c in enumerate(plan.get("create") or []):
         path = str(c.get("path") or "").replace("\\", "/").lstrip("/")
         iid = f"c{i}"
+        if c.get("type") == "skill":
+            it = _skill_create(lib, out, c, iid, target)
+            items.append(it)
+            continue
         it = {"id": iid, "kind": "create", "path": path, "reason": c.get("reason", ""), "checked": True, "warnings": []}
         full = os.path.normpath(os.path.join(out, path))
         if ".." in path.split("/") or not os.path.isfile(full):
@@ -644,7 +708,13 @@ def preview(lib: Library, rid: str) -> dict:
         if frm in lib.nodes and lib.nodes[frm]["type"] == "rule" and frm not in created_ids:
             pass
         items.append(it)
-    items += auto_links(lib, target, items)
+    items += auto_links(lib, target, [it for it in items if it.get("node_type") != "skill"])
+    proposed = [{"name": it.get("node_id"), "path": it["path"], "uses": it.get("uses"),
+                 "approval": it["approval"], "error": it.get("error")}
+                for it in items if it.get("node_type") == "skill"]
+    if req.get("proposed_skills") != proposed:
+        req["proposed_skills"] = proposed
+        _save(lib.root, req)
     used = {i.get("src") for i in items if i.get("src")}
     unassigned = [f["name"] for f in req["files"] if f["name"] not in used and not f["existing"]]
     return {"request": req, "summary": plan.get("summary", ""), "items": items, "errors": errors,
@@ -672,6 +742,12 @@ def apply(lib: Library, rid: str, selected: list[str]) -> dict:
         if it["id"] not in sel or it["kind"] != "create":
             continue
         full = os.path.join(out, it["path"])
+        if it["node_type"] == "skill":
+            import skills
+            result = skills.import_skill(lib, full, attach_to=it["uses"], disable_original=False)
+            done.append(result["path"])
+            lib = Library(lib.root)
+            continue
         if it["node_type"] == "rule":
             with open(full, "rb") as f:
                 data = f.read()

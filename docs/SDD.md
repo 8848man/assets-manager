@@ -1,6 +1,6 @@
 # Assets Manager — 소프트웨어 설계 문서 (SDD)
 
-앱 버전 0.16.5 · 기획서 v3.3(+14A~14L) 기준 · 2026-11-26
+앱 버전 0.16.6 · 기획서 v3.3(+14A~14L) 기준 · 2026-11-27
 
 > 이 문서는 **구현의 지도**다. "왜 이렇게 정했나"는 기획서(`../../assets_manager_기획서_v3.3.md`)에 있고, 결정마다 `Qnn` 번호로 연결된다. 코드를 바꾸면 이 문서의 해당 절도 함께 고친다.
 
@@ -87,7 +87,7 @@
 | `core/engine.py` | 로더, 검증, 상속 조립, 렌더, 패키지(한도·덜어내기·민감도), 변경 감지, 그래프·index. 구성 요소 종류 기본값 `PART_DEFAULTS`, 이미지 키·ImageGen 대상 기본값 `IMAGE_KEYS_DEFAULT`·`IMAGE_GEN_DEFAULT`(v3.10) | `Library`(`load`, `assemble`, `_attach_components`, `render`, `add_examples`, `package`, `changes`, `approve`, `graph`, `build_index`, `_ref_id`·`_ref_part`, `image_keys`·`image_gen`·`similar_images`), `image_lines`, `make_contact_sheet` | PyYAML, Pillow, `search`·`components`(지연 import) |
 | `core/server.py` | HTTP API, 정적 파일, 포트 인계(`/api/shutdown`), 레이아웃 저장 | `Handler`, `library()`, `node_detail`, `handle_drop`(v3.1 호환), `bind` | 모든 core 모듈 |
 | `core/drops.py` | 예상 결과 창: 놓은 것을 분류해 선택지 생성(stage), 실행(commit), 승격, 되돌리기 | `stage`, `commit`, `promote`, `undo`, `OPT` | `folder_requests`, `store` |
-| `core/folder_requests.py` | AI 요청의 수명: 준비 → 패키지 → 결과 수신 → 미리보기 → 적용. 원본 짝 맞추기 | `new_request`, `prepare`, `package`, `render`, `receive_zip`, `attach`, `auto_assign`, `assign`, `preview`, `apply`, `_set_rule` | `extract`, `store` |
+| `core/folder_requests.py` | AI 요청의 수명: 준비 → 패키지 → 결과 수신 → 미리보기 → 적용. 원본 짝 맞추기와 스킬 create 승인 검사 | `new_request`, `prepare`, `package`, `render`, `receive_zip`, `attach`, `auto_assign`, `assign`, `preview`, `apply`, `_set_rule`, `coordinator_skill_allowed` | `extract`, `store`, `skills`(지연 import) |
 | `core/store.py` | 드롭 히스토리, 버전 보관, Git, 휴지통, 가져오기, 기본값 업데이트 | `append_history`, `read_history`, `backup_sync`, `fresh_files`, `versions_for`, `restore_version`, `git_commit`(라이브러리 데이터만, "기타" 제외), `git_remote_status`(앞선·뒤진 수, 네트워크 없음), `git_push`(버튼으로만, 강제 없음), `_unstage`, `commit_message`, `delete_node`, `restore_trash`, `import_items`, `import_zip`, `defaults_updates`, `upgrade_defaults` | git(선택) |
 | `core/authoring.py` | 파일 하나·여럿을 AI가 메타로 등록하게 하는 작성 프롬프트 (미등록·기존 노드 다시 쓰기) | `build`, `render` | `extract` |
 | `core/components.py` | 구성 요소 분리(v3.9, Q81-A): 메타 `components` 정리(`normalize`), 잘라 낸 그림·구도 도식 캐시(`ensure`, `.assets/components/`), AI 요청(좌표 격자 사본 + 프롬프트) → 답 받기 → 미리보기(상자 수정 합치기) → 반영, 사람이 고친 요소 저장 | `normalize`, `ensure`, `crop_image`, `composition_image`, `grid_image`, `build`, `render_request`, `receive`, `preview`, `apply`, `save`, `open_request` | `folder_requests`, `store`, `tidy.parse_plan_text`, Pillow |
@@ -110,7 +110,7 @@
 | `ui/compare.html` · `compare.js` | 두 프롬프트 버전의 결과와 골든 샘플을 출처를 가리고 비교(Q87) | `candidate`, `shuffle` | 브라우저 FileReader·Web Crypto |
 | `src-tauri/src/main.rs` | 셸, `app/` 폴더 찾기, 사이드카 실행(`py` → `python` 순서), 종료 처리 | `find_app_dir`, `spawn_server` | tauri 2, tauri-plugin-drag 2 |
 | `defaults/` | 앱 번들 기본값 (`keys.yaml`, `targets.yaml`, `defaults.md`) — 라이브러리에 없으면 복사 | | |
-| `tests/` | 단위·통합 테스트 115개, 고정 자료 `tests/fixtures/` | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
+| `tests/` | 단위·통합 테스트 117개, 고정 자료 `tests/fixtures/` | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
 
 ## 5. 데이터 모델
 
@@ -246,6 +246,7 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 - 짝 맞추기: 메타 `file` 이름 → 원래 경로 이름 → `assign` → `auto_assign`(종류별로 빠진 것 1개 + 남은 파일 1개).
 - 자동 연결(`auto_links`, Q70-C, v3.4 수정): 노드에 놓은 결과는 AI가 연결을 비워도 생성 항목마다 `link` 항목을 붙인다. 새 원칙 → 놓은 노드가 `uses`로 붙임(기본값 아래면 `child_of`), 부품 원칙에 놓은 새 세트 → 그 세트가 원칙을 `uses`(`uses_target`), 그 밖의 새 규칙 노드 → `inherits`에 대상 추가(`_defaults` 제거), 세트 아래 산출물 → 적용 때 `set` 지정(링크 생략), 레퍼런스 아래 비규칙 → `variant_of`, 그 밖 → `child_of`(정보 엣지). 빈 공간에 놓아 대상이 없으면 UI가 대상을 물어 `set_target`으로 다시 미리보기.
 - `apply`: 의존성이 끊긴 항목은 자동 제외. 산출물은 `outputs/<set>/`, 원본 없으면 메타만. 규칙은 `_set_rule`로 키만 수정(엣지 note 보존).
+- 스킬 create(ADR-012): `create[{type: skill, path: skills/<name>, uses: <규칙 id 또는 @target>, approval?: human|coordinator}]`는 `out/skills/<name>/SKILL.md` 폴더 전체를 검사한다. `name`과 폴더 이름이 같고 붙일 규칙 노드가 있어야 미리보기에서 선택 가능하다. `request.json.proposed_skills`와 요청 목록에 제안이 표시된다. 사람이 선택 적용하면 기존 `skills.import_skill`을 원본 비활성화 없이 호출하고 지정 노드의 `uses`에 붙인다. `approval` 기본값은 `human`; `coordinator`는 `이름@SKILL.md SHA-256` 허용 기록 대조 인터페이스만 있고 기능 플래그가 꺼져 있어 적용할 수 없다.
 
 ### 6.6 예상 결과 (`drops.stage` → `drops.commit`)
 `stage`는 놓은 것을 분류해 `{sid, case, what, where, options, details, simple}`을 돌려준다. `case`: result(plan 있는 zip) | zip | files. 선택지 표는 기획서 v3.3 14.4. `simple=True`(빈 공간에 놓은 파일, 결과 없는 zip)만 설정이 꺼졌을 때 창 없이 실행된다. `commit`은 실행 전 `backup_sync`를 하고 `created`(되돌리기 대상)를 돌려준다.
@@ -412,11 +413,12 @@ prepare / new_request ──► package ──► (외부 AI) ──► receive_
 | AI → 앱 | `assets-import.zip`: `plan.yaml`, `<폴더>/<이름>.meta.yaml`, 원본, 규칙 md / 또는 에이전트가 `inbox/<rid>/out/`에 직접 | `receive_zip`, `store.import_zip` |
 
 구성 요소 답 `plan.yaml`: `request`, `node`, `summary`, `components[{name, part, title, box, regions?, flow?, spec, check}]` (형식: `skills/assets-manager/references/components-format.md`).
-`plan.yaml`: `request?`, `summary`, `create[{path, reason}]`, `update[{node | "@target", set_rules{}, reason}]`, `relations[{from, type, to, reason}]`, `missing[]`.
+`plan.yaml`: `request?`, `summary`, `create[{path, reason, type?: skill, uses?: <규칙 id|@target>, approval?: human|coordinator}]`, `update[{node | "@target", set_rules{}, reason}]`, `relations[{from, type, to, reason}]`, `missing[]`. 스킬 create의 `path`는 `skills/<name>` 폴더이며 `SKILL.md`와 부속 파일을 포함한다.
 Codex 읽기 전용 실행(Q85)은 최종 표준 출력의 YAML 코드 블록에 같은 요청 id의 `plan.yaml`을 돌려준다. 새 파일은 `inline_files: {상대 경로: 전체 텍스트}`에 담고 앱이 `inbox/<rid>/out/`에 저장한다. 저장 경로는 `.md`·`.meta.yaml`로 제한하고 미리보기 후 적용한다.
 
 ## 11. UI 구조 (`ui/app.js`)
 
+- AI 결과 미리보기(`resultHtml`): 스킬 create 행에 승인 주체와 붙일 `uses` 노드를 표시한다. `approval: coordinator` 행은 서버의 오류로 체크할 수 없다.
 - 설정 창(`#settings-dialog`, 상단 `설정` 버튼·초록 점 = 연결됨): `openSettings({reason, then})` — 도구 카드(찾음/버전/기본 선택/사용/연결 시험/설치 명령 복사/고급: 직접 경로·실행 인자). `reason`이 있으면 위에 '이 기능은 AI가 필요합니다' 안내와 단계, 연결되면 `계속하기`로 원래 작업을 이어 실행. 진행 표시 `#job-bar`(`runLocal`·`pollJob`·`renderJobs`: 경과 시간, 로그 보기, 취소, 실패 사유).
 - 설정 창의 뜻 검색 칸(v3.11, `loadEmbedBox`, `#embed-box`): 켜짐/꺼짐, 모델·패키지·색인 조각 수, `내려받고 켜기`/`켜기`·`끄기`·`다시 색인`. 작업 중에는 창이 열려 있고 보일 때만 1.5초마다 상태를 다시 읽는다.
 - 설정 창의 HTML 렌더링 칸(Q88, `loadRenderWebBox`): 상태, 선택형 Chromium 설치·켜기·끄기. 켜 두었지만 준비가 안 됐으면(버전 불일치 등) `reason`을 보여 주고 버튼은 "Chromium 다시 내려받기". 작업 중에는 창이 보일 때만 상태를 다시 읽는다.
@@ -447,7 +449,7 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 |---|---|
 | `test_engine.py` | 기본값 복사, 다중 상속, 순환, 동의어, 지시문, 결정성, 덜어내기 3단계, 민감도, 변경 감지, index |
 | `test_v3.py` | 우선순위·점검, 미등록·작성, 가져오기, 히스토리, 버전·휴지통·Git, 자동 커밋 메시지(분류·이름·이름 변경·출처·확인 시점), 루트 문서("기타")는 자동 커밋 제외·설정 파일은 커밋, 원격 상태·올리기(원격 없음, 앞선 수, 성공, 원격이 앞서면 강제 없이 실패), 기본값 업데이트, fresh |
-| `test_requests.py` | 폴더 요청: 준비, 시트·묶음, 결과 미리보기·적용, 덮어쓰기, 잘못된 plan |
+| `test_requests.py` | 폴더 요청: 준비, 시트·묶음, 결과 미리보기·적용, 덮어쓰기, 잘못된 plan, 스킬 create·요청 목록·조율자 승인 차단 |
 | `test_v33.py` | 검색, 참고 예시·덜어내기, stage 선택지, commit(산출물·원본·변형·골든·승격·되돌리기), 요청 없는 zip·`@target`·짝 맞추기, 내보내기 명령, RAG, MCP(stdio 실제 프로세스), 노드 종류별 자동 연결, 개발 착수 프리셋 조립(`app/` 상위에 라이브러리 `principles/`·`sets/`가 있으면 실제 프리셋, 없으면 `tests/fixtures/dev-presets/` 사본), `uses` 조립 순서, 하위 정리 왕복(프롬프트 동일·쓰이는 노드 휴지통 거부·값 변경 감지), 승인 게이트·작업 대기 끝 단락 |
 | `test_local_ai.py` | 로컬 AI 도구: 찾기(직접 경로)·버전·연결 시험, 실행 → 결과 파일 → 정리 미리보기, 결과 파일이 없으면 failed, Codex 읽기 전용 인자·표준 출력 plan과 인라인 파일의 요청 경로 검사. 가짜 도구 사용 |
 | `test_skills.py` | 도구 스킬 설치(다시 해도 같음), 세트 → 스킬 컴파일(이식 가능한 프런트매터·결정성), 내보내기·고친 흔적 감지·제거, 다른 스킬은 덮어쓰지 않고 읽기만 |

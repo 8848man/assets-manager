@@ -150,6 +150,37 @@ relations:
         self.assertTrue(all(i.get("error") for i in pv["items"]))
         self.assertTrue(all(not i["checked"] for i in pv["items"]))
 
+    def test_skill_create_preview_request_list_and_apply(self):
+        req = self.prepared()
+        out = os.path.join(self.root, "inbox", req["id"], "out")
+        write(out, "skills/example-skill/SKILL.md", "---\nname: example-skill\ndescription: Example workflow\n---\nDo the work.\n")
+        write(out, "skills/example-skill/references/guide.md", "Example guide.\n")
+        write(out, "plan.yaml", f"request: {req['id']}\ncreate:\n  - type: skill\n    path: skills/example-skill\n    uses: blog\n")
+        pv = freq.preview(self.lib(), req["id"])
+        item = pv["items"][0]
+        self.assertEqual((item["node_type"], item["approval"], item["uses"]), ("skill", "human", "blog"))
+        self.assertTrue(item["checked"])
+        self.assertEqual(freq.list_requests(self.root)[0]["proposed_skills"][0]["name"], "example-skill")
+        freq.apply(self.lib(), req["id"], [item["id"]])
+        lib = self.lib()
+        self.assertEqual(lib.nodes["example-skill"]["type"], "skill")
+        self.assertIn("example-skill", lib.nodes["blog"]["uses"])
+        self.assertTrue(os.path.isfile(os.path.join(self.root, "skills", "example-skill", "references", "guide.md")))
+
+    def test_coordinator_skill_approval_stays_disabled(self):
+        req = self.prepared()
+        out = os.path.join(self.root, "inbox", req["id"], "out")
+        write(out, "skills/example-skill/SKILL.md", "---\nname: example-skill\n---\nSteps.\n")
+        write(out, "plan.yaml", f"request: {req['id']}\ncreate:\n  - type: skill\n    path: skills/example-skill\n    uses: blog\n    approval: coordinator\n")
+        item = freq.preview(self.lib(), req["id"])["items"][0]
+        self.assertFalse(item["checked"])
+        self.assertIn("조율자 승인은 꺼져 있음", item["error"])
+        self.assertTrue(freq.coordinator_skill_allowed("example-skill", item["draft_sha256"], {"example-skill@" + item["draft_sha256"]}))
+        self.assertFalse(freq.coordinator_skill_allowed("example-skill", item["draft_sha256"], set()))
+        result = freq.apply(self.lib(), req["id"], [item["id"]])
+        self.assertEqual(result["applied"], [])
+        self.assertNotIn("example-skill", self.lib().nodes)
+
 
 if __name__ == "__main__":
     unittest.main()
