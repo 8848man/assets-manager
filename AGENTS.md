@@ -38,7 +38,7 @@
 ## 명령
 ```
 # 라이브러리 루트(app의 상위)에서
-python -m unittest discover -s app/tests     # 테스트 (114개, 선택 기능 2개는 환경에 따라 건너뜀)
+python -m unittest discover -s app/tests     # 테스트 (115개, Windows에서는 POSIX pty 2개 건너뜀)
 python app/core/server.py                    # 서버 → http://127.0.0.1:8765
 python app/core/extract.py <파일>             # 결정적 값 추출
 python app/core/rag.py                       # RAG JSONL 내보내기
