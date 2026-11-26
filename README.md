@@ -124,7 +124,7 @@ Assets Manager는 그 지시를 **규칙**과 **레퍼런스 파일**로 한 번
 | 데스크톱 | Tauri v2 (Rust), `tauri-plugin-drag`로 네이티브 파일 드래그 |
 | UI | 빌드 단계 없는 바닐라 JS, Cytoscape.js, xterm.js |
 | AI 연동 | MCP (stdio JSON-RPC), Claude Code·Codex CLI |
-| 테스트 | `unittest` 112개 |
+| 테스트 | `unittest` 115개 |
 
 ## 시작하기
 

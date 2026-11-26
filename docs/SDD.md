@@ -110,7 +110,7 @@
 | `ui/compare.html` · `compare.js` | 두 프롬프트 버전의 결과와 골든 샘플을 출처를 가리고 비교(Q87) | `candidate`, `shuffle` | 브라우저 FileReader·Web Crypto |
 | `src-tauri/src/main.rs` | 셸, `app/` 폴더 찾기, 사이드카 실행(`py` → `python` 순서), 종료 처리 | `find_app_dir`, `spawn_server` | tauri 2, tauri-plugin-drag 2 |
 | `defaults/` | 앱 번들 기본값 (`keys.yaml`, `targets.yaml`, `defaults.md`) — 라이브러리에 없으면 복사 | | |
-| `tests/` | 단위·통합 테스트 114개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
+| `tests/` | 단위·통합 테스트 115개 | `test_engine`, `test_v3`, `test_requests`, `test_v33`, `test_local_ai`, `test_skills`, `test_standards`, `test_console`, `test_components`, `test_v310`, `test_embed`, `test_render_web` | |
 
 ## 5. 데이터 모델
 
@@ -449,7 +449,6 @@ python -m unittest discover -s app/tests      # 라이브러리 루트에서
 | `test_v3.py` | 우선순위·점검, 미등록·작성, 가져오기, 히스토리, 버전·휴지통·Git, 자동 커밋 메시지(분류·이름·이름 변경·출처·확인 시점), 루트 문서("기타")는 자동 커밋 제외·설정 파일은 커밋, 원격 상태·올리기(원격 없음, 앞선 수, 성공, 원격이 앞서면 강제 없이 실패), 기본값 업데이트, fresh |
 | `test_requests.py` | 폴더 요청: 준비, 시트·묶음, 결과 미리보기·적용, 덮어쓰기, 잘못된 plan |
 | `test_v33.py` | 검색, 참고 예시·덜어내기, stage 선택지, commit(산출물·원본·변형·골든·승격·되돌리기), 요청 없는 zip·`@target`·짝 맞추기, 내보내기 명령, RAG, MCP(stdio 실제 프로세스), 노드 종류별 자동 연결, 개발 착수 프리셋 조립, `uses` 조립 순서, 하위 정리 왕복(프롬프트 동일·쓰이는 노드 휴지통 거부·값 변경 감지), 승인 게이트·작업 대기 끝 단락 |
-
 | `test_local_ai.py` | 로컬 AI 도구: 찾기(직접 경로)·버전·연결 시험, 실행 → 결과 파일 → 정리 미리보기, 결과 파일이 없으면 failed, Codex 읽기 전용 인자·표준 출력 plan과 인라인 파일의 요청 경로 검사. 가짜 도구 사용 |
 | `test_skills.py` | 도구 스킬 설치(다시 해도 같음), 세트 → 스킬 컴파일(이식 가능한 프런트매터·결정성), 내보내기·고친 흔적 감지·제거, 다른 스킬은 덮어쓰지 않고 읽기만 |
 | `test_standards.py` | 스킬 노드 보관·붙이기·조립, 표준 찾기·`cli.py standard`·쓰기 없는 `--lookup`(기존 패키지와 기본값 파일 보존), 설치된 스킬 가져오기(원래 끄기), 스킬 폴더를 노드에 놓기, AI가 부르게 하기(개인 스킬·전역 지침 줄), 원칙으로 풀기 요청, 스킬 휴지통(폴더째) |
