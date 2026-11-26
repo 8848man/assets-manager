@@ -47,7 +47,14 @@ python app/core/cli.py standard "<작업>"        # 작업에 맞는 표준 조�
 python app/core/cli.py standard "<작업>" --lookup  # 파일을 만들지 않고 선택된 표준과 후보만 조회
 python app/core/cli.py help                  # am 노드 명령 (서버 실행 뒤에는 .assets/bin/am 으로도)
 cd app && npm run dev                        # 데스크톱 앱 (Rust ≥ 1.90)
+cd app && npm run test                       # 테스트 (app 안에서, 위 unittest와 같음)
+cd app && npm run server                     # 서버 (app 안에서)
 ```
+
+### 명령 실행 형태 (실행 도구 승인 규칙에 맞추기)
+Codex 등 실행 도구의 승인 규칙은 명령의 앞부분으로 허용 여부를 가린다. 형태가 다르면 같은 일도 매번 승인을 묻는다.
+- **명령 앞에 환경 변수를 붙이지 않는다**(`FOO=1 python ...`, `$env:FOO='1'; ...` 금지). 환경 변수가 필요한 실행은 `package.json`의 `npm run` 스크립트로 한다. 필요한 스크립트가 없으면 스크립트를 추가하는 변경으로 제안한다.
+- **`gh api` 조회는 `gh api --method GET <경로> ...`처럼 `--method GET`을 맨 앞에 붙이고, 메서드는 한 번만 적는다**(`-X`와 `--method`를 함께 쓰거나 뒤에 다시 적지 않는다).
 
 ## 바꿀 때 지킬 것
 - **결정성(P2):** 조립 경로(`assemble`/`render`/`package`/`search`)에 난수, 현재 시각, 순서가 보장되지 않는 dict·set 순회, AI 호출을 넣지 않는다. 같은 입력이면 같은 프롬프트여야 한다.
