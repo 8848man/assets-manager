@@ -464,7 +464,7 @@ UI는 자동 테스트가 없다. 변경 후 브라우저 모드(`start.bat brow
 
 - 뜻 검색(선택, v3.11): `requirements.txt`에 넣지 않는다. 설정의 버튼이 서버를 돌리는 Python에 `onnxruntime`·`tokenizers`를 설치하고 모델(약 135MB)을 사용자 캐시 폴더에 받는다.
 - HTML 렌더링(선택, Q88): `requirements.txt`에 넣지 않는다. 설정 버튼에서만 `playwright`와 Chromium을 설치한다. 실제 브라우저 추출은 이 PC에서 선택 기능을 켠 경우에만 실행한다.
-- `start.bat`(라이브러리 루트): Python 확인 → 패키지 설치(최초) → (선택) AI 탭용 `pywinpty` 설치, 실패해도 계속 → 8765 포트의 이전 서버 정리 → 빌드된 exe / `npm run dev` / 브라우저 모드. 메시지는 영문만(cmd 한글 파싱 문제).
+- `start.bat`(라이브러리 루트): Python 확인 → 패키지 설치(최초) → (선택) AI 탭용 `pywinpty` 설치, 실패해도 계속 → 8765 포트의 이전 서버 정리 → 빌드된 exe / `npm run dev` / 브라우저 모드. exe가 `app/ui/` 파일보다 오래됐으면 내장된 화면이 낡은 것으로 보고 exe 대신 현재 서버가 화면을 제공하는 브라우저 모드로 연다. `start.bat build`로 exe를 갱신한다. 메시지는 영문만(cmd 한글 파싱 문제).
 - 앱 코드 이력: `app/`에서 `git log`. 코드를 바꾼 작업은 끝날 때 `app/`에서 커밋한다(라이브러리 데이터의 자동 기록과 별개). `main`에 직접 push하지 않고 작업 브랜치 → PR → 사용자 머지 순서로 올린다(`AGENTS.md` "브랜치와 PR").
 - 서버 시작 시 포트가 막혀 있으면 이전 서버에 `/api/shutdown`을 요청하고 인계받는다.
 - exe는 `find_app_dir`로 사이드카(`core/server.py`)가 있는 `app/`을 찾는다: `ASSETS_APP_DIR` → exe 위치 기준(`app/src-tauri/target/<release|debug>/`의 세 단계 위, `core/server.py`가 있을 때) → 빌드할 때의 경로(`CARGO_MANIFEST_DIR`). 라이브러리 폴더를 옮기거나 이름을 바꿔도 다시 빌드하지 않아도 된다(2026-11-24). 다른 PC 배포는 3단계.
