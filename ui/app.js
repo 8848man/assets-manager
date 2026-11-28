@@ -1,5 +1,5 @@
 /* Assets Manager UI — 그래프, 상세 패널, 드롭 영역, AI 작성 흐름, 가져오기, 기록과 되돌리기 (기획서 v3) */
-const APP_VERSION = "0.16.5"; // server.py의 APP_VERSION과 같아야 함
+const APP_VERSION = "0.16.6"; // server.py의 APP_VERSION과 같아야 함
 // Tauri 창(exe의 tauri.localhost, 개발 모드의 127.0.0.1:1430 개발 서버)이면 사이드카 8765,
 // 그 밖(서버가 UI를 직접 내주는 브라우저 모드, 어떤 포트든)은 같은 출처
 const API = window.__TAURI__ ? "http://127.0.0.1:8765" : "";
@@ -210,6 +210,7 @@ function renderTopbar(g) {
   const rb = $("#result-btn");
   rb.hidden = !done.length;
   rb.textContent = `AI 결과 도착 ${done.length}개`;
+  rb.title = done.flatMap((r) => r.proposed_skills || []).map((s) => `스킬 제안: ${s.name || s.path} (${s.approval})`).join("\n");
   rb.onclick = () => (done[0].kind === "tidy" ? openTidy(done[0].node) : done[0].kind === "components" ? openComponents(done[0].node) : openResult(done[0].id));
   const b = g.backup || {};
   $("#backup").textContent = b.repo ? "Git 기록 중" : b.inside_other ? "버전 보관 (상위 폴더가 Git)" : b.available === false ? "버전 보관 (Git 없음)" : "버전 보관";
@@ -769,7 +770,7 @@ function resultHtml(pv) {
     const dis = it.error ? "disabled" : "";
     let main = "";
     if (it.kind === "create") {
-      main = `<b>${esc(it.title || it.path)}</b> <span class="meta-line">${esc(it.node_id || "")} · ${esc(it.node_type || "")}${it.output ? " · 산출물" : ""} · ${esc(it.path)}</span>${it.summary ? `<div class="muted">${esc(it.summary)}</div>` : ""}`;
+      main = `<b>${esc(it.title || it.path)}</b> <span class="meta-line">${esc(it.node_id || "")} · ${esc(it.node_type || "")}${it.output ? " · 산출물" : ""} · ${esc(it.path)}${it.node_type === "skill" ? ` · 승인: ${esc(it.approval)} · uses: ${esc(it.uses || "")}` : ""}</span>${it.summary ? `<div class="muted">${esc(it.summary)}</div>` : ""}`;
       if (it.src) main += `<div class="meta-line">원본: ${esc(it.src)}</div>`;
       if (it.missing_original && unassigned.length) main += `<div class="oc-assign">원본 고르기: <select data-assign="${esc(it.path)}"><option value="">(원본 없이 등록)</option>${unassigned.map((u) => `<option>${esc(u)}</option>`).join("")}</select></div>`;
     } else if (it.kind === "add" || it.kind === "same") main = `<b>${esc(it.node_title || it.node)}</b>에 <code>${esc(it.key)}</code> = ${esc(fmtVal(it.after))}`;
